@@ -109,7 +109,7 @@ parent Cren7_E233S
 visibility pack
 type bigWig
 color 124,190,181
-bigDataUrl ../../data/ChIP-seq_S.solfataricus/CreN7_E234.r1.normRatio.bw
+bigDataUrl ../../data/ChIP-seq_S.islandicus/CreN7_E234.r1.normRatio.bw
 
 track Cren7_r2
 longLabel Cren7 replicate 2
@@ -119,7 +119,7 @@ parent Cren7_E233S
 visibility pack
 type bigWig
 color 124,190,181
-bigDataUrl ../../data/ChIP-seq_S.solfataricus/CreN7_E234.r2.normRatio.bw
+bigDataUrl ../../data/ChIP-seq_S.islandicus/CreN7_E234.r2.normRatio.bw
 
 
 track Cren7_cbp1-
@@ -147,7 +147,7 @@ parent Cren7_cbp1-
 visibility pack
 type bigWig
 color 124,190,181
-bigDataUrl ../../data/ChIP-seq_S.solfataricus/CreN7_cbp1-.r1.normRatio.bw
+bigDataUrl ../../data/ChIP-seq_S.islandicus/CreN7_cbp1-.r1.normRatio.bw
 
 track Cren7_kor2
 longLabel Cren7 replicate 2
@@ -157,7 +157,7 @@ parent Cren7_cbp1-
 visibility pack
 type bigWig
 color 124,190,181
-bigDataUrl ../../data/ChIP-seq_S.solfataricus/CreN7_cbp1-.r2.normRatio.bw
+bigDataUrl ../../data/ChIP-seq_S.islandicus/CreN7_cbp1-.r2.normRatio.bw
 
 
 
