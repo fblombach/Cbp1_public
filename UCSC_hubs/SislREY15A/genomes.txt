@@ -1,0 +1,9 @@
+genome NC_017276.1
+trackDb trackDb.txt
+groups groups.txt
+description S. islandicus REY15A
+twoBitPath ../../genome_data/SislREY15A/SisREY15A.2bit
+organism Saccharolobus islandicus
+defaultPos NC_017276.1:1-1000
+orderKey 4700
+scientificName Saccharolobus islandicus

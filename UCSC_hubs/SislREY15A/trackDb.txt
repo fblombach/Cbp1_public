@@ -1,0 +1,265 @@
+track genes
+longLabel NCBI gene annotations
+shortLabel Genes NCBI
+group genes
+priority 100
+visibility hide
+itemRgb On
+type bigBed 9 +
+bigDataUrl ../../genome_data/GCF_000189555.1_ASM18955v1_genomic.gff
+searchIndex name,geneProduct
+
+track Cbp1_E233S
+group ChIP-seq
+container multiWig
+shortLabel Cbp1
+longLabel Cbp1 ChIP-seq
+type bigWig
+#viewLimits 0:300
+visibility full
+aggregate transparentOverlay
+graphTypeDefault points
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 100
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track Cbp1_r1
+longLabel Cbp1 replicate 1
+shortLabel Cbp1 r1
+group ChIP-seq
+parent Cbp1_E233S
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../../data/ChIP-seq_S.islandicus/Cbp1_E234.r1.normRatio.bw
+
+track Cbp1_r2
+longLabel Cbp1 replicate 2
+shortLabel Cbp1 r2
+group ChIP-seq
+parent Cbp1_E233S
+visibility pack
+type bigWig
+color 80,80,80
+bigDataUrl ../../data/ChIP-seq_S.islandicus/Cbp1_E234.r2.normRatio.bw
+
+track Cbp1_cbp1-
+group ChIP-seq
+container multiWig
+shortLabel Cbp1
+longLabel Cbp1 ChIP-seq
+type bigWig
+#viewLimits 0:300
+visibility full
+aggregate transparentOverlay
+graphTypeDefault points
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 100
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track Cbp1_r1
+longLabel Cbp1 replicate 1
+shortLabel Cbp1 r1
+group ChIP-seq
+parent Cbp1_cbp1-
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../../data/ChIP-seq_S.islandicus/Cbp1_cbp1-.r1.normRatio.bw
+
+track Cbp1_r2
+longLabel Cbp1 replicate 2
+shortLabel Cbp1 r2
+group ChIP-seq
+parent Cbp1_cbp1-
+visibility pack
+type bigWig
+color 80,80,80
+bigDataUrl ../../data/ChIP-seq_S.islandicus/Cbp1_cbp1-.r2.normRatio.bw
+
+
+track Cren7_E233S
+group ChIP-seq
+container multiWig
+shortLabel Cren7
+longLabel Cren7 ChIP-seq
+type bigWig
+#viewLimits 0:160
+visibility full
+aggregate transparentOverlay
+graphTypeDefault points
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 90
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track Cren7_r1
+longLabel Cren7 replicate 1
+shortLabel Cren7 r1
+group ChIP-seq
+parent Cren7_E233S
+visibility pack
+type bigWig
+color 124,190,181
+bigDataUrl ../../data/ChIP-seq_S.solfataricus/CreN7_E234.r1.normRatio.bw
+
+track Cren7_r2
+longLabel Cren7 replicate 2
+shortLabel Cren7 r2
+group ChIP-seq
+parent Cren7_E233S
+visibility pack
+type bigWig
+color 124,190,181
+bigDataUrl ../../data/ChIP-seq_S.solfataricus/CreN7_E234.r2.normRatio.bw
+
+
+track Cren7_cbp1-
+group ChIP-seq
+container multiWig
+shortLabel Cren7
+longLabel Cren7 ChIP-seq
+type bigWig
+#viewLimits 0:160
+visibility full
+aggregate transparentOverlay
+graphTypeDefault points
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 90
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track Cren7_r1
+longLabel Cren7 replicate 1
+shortLabel Cren7 r1
+group ChIP-seq
+parent Cren7_cbp1-
+visibility pack
+type bigWig
+color 124,190,181
+bigDataUrl ../../data/ChIP-seq_S.solfataricus/CreN7_cbp1-.r1.normRatio.bw
+
+track Cren7_r2
+longLabel Cren7 replicate 2
+shortLabel Cren7 r2
+group ChIP-seq
+parent Cren7_cbp1-
+visibility pack
+type bigWig
+color 124,190,181
+bigDataUrl ../../data/ChIP-seq_S.solfataricus/CreN7_cbp1-.r2.normRatio.bw
+
+
+
+track E233S_Cappable-seq
+group Cappable-seq
+container multiWig
+shortLabel E233S Cappable-seq
+longLabel E233S Cappable-seq
+type bigWig
+#viewLimits 0:160
+visibility full
+aggregate transparentOverlay
+graphTypeDefault bar
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 95
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track E233S_Cappable_plus
+longLabel E233S Cappable-seq plus strand
+shortLabel E233S Cappable frw
+group Cappable-seq
+parent E233S_Cappable-seq
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../../data/Cappable-seq_S.islandicus/E234_gm.5primeCov.plus.bw
+
+track E233S_Cappable_minus
+longLabel E233S Cappable-seq minus strand
+shortLabel E233S Cappable rev
+group Cappable-seq
+parent E233S_Cappable-seq
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../../data/Cappable-seq_S.islandicus/E234_gm.5primeCov.minus.bw
+
+
+track cbp1-_Cappable-seq
+group Cappable-seq
+container multiWig
+shortLabel cbp1- Cappable-seq
+longLabel cbp1- Cappable-seq
+type bigWig
+#viewLimits 0:160
+visibility full
+aggregate transparentOverlay
+graphTypeDefault bar
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 95
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track cbp1-_Cappable_plus
+longLabel cbp1- Cappable-seq plus strand
+shortLabel cbp1- Cappable frw
+group Cappable-seq
+parent cbp1-_Cappable-seq
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../../data/Cappable-seq_S.islandicus/cbp1_gm.5primeCov.plus.bw
+
+track cbp1-_Cappable_minus
+longLabel cbp1- Cappable-seq minus strand
+shortLabel cbp1- Cappable rev
+group Cappable-seq
+parent cbp1-_Cappable-seq
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../../data/Cappable-seq_S.islandicus/cbp1_gm.5primeCov.minus.bw
+
+
+
+
+track peaks_MACS2
+group peaks
+superTrack on show
+shortLabel Called peaks
+longLabel Peaks called with MACS2
+#viewLimits 0:160
+visibility full
+aggregate transparentOverlay
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 20
+configurable on
+autoScale on
+
+track Cbp1_peaks_expon
+longLabel Cbp1 peaks exponential growth, IDR 0.05, minum 5-fold enrichment
+shortLabel Cbp1 peaks expon
+group peaks
+parent peaks_MACS2
+type bigBed 5
+bigDataUrl ../../data/SislCbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bigBed
+visibility squish
+
+

@@ -1,0 +1,6 @@
+hub Silandicus_Cbp1
+shortLabel SislCbp1
+longLabel S.islandicus Cbp1 ChIP-seq
+genomesFile genomes.txt
+email f.blombach@ucl.ac.uk
+descriptionUrl https://www.biorxiv.org/content/10.1101/2023.03.24.534125v1
