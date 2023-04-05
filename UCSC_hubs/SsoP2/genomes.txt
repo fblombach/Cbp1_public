@@ -1,4 +1,4 @@
-genome NC_002754
+genome gi|15896971|ref|NC_002754.1|
 trackDb trackDb.txt
 groups groups.txt
 description S. soflataricus P2
