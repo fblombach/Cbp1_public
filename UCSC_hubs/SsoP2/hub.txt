@@ -1,5 +1,5 @@
 hub rnaplab_Cbp1
-shortLabel RNAP-lab
+shortLabel Cbp1
 longLabel ChIP-seq experiments
 genomesFile genomes.txt
 email f.blombach@ucl.ac.uk
