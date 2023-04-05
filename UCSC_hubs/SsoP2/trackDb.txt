@@ -1,0 +1,185 @@
+track genes
+longLabel NCBI gene annotations
+shortLabel Genes NCBI
+group genes
+priority 100
+visibility hide
+itemRgb On
+type bigBed 9 +
+bigDataUrl ../genome_data/SsoP2/Wurtzel.gff
+searchIndex name,geneProduct
+
+track Cbp1
+group ChIP-seq
+container multiWig
+shortLabel Cbp1
+longLabel Cbp1 ChIP-seq
+type bigWig
+#viewLimits 0:300
+visibility full
+aggregate transparentOverlay
+graphTypeDefault points
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 100
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track Cbp1_r1
+longLabel Cbp1 replicate 1
+shortLabel Cbp1 r1
+group ChIP-seq
+parent Cbp1
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../data/ChIP-seq_S.solfataricus/Cbp1_expon_r1.normRatio.bw
+
+track Cbp1_r2
+longLabel Cbp1 replicate 2
+shortLabel Cbp1 r2
+group ChIP-seq
+parent Cbp1
+visibility pack
+type bigWig
+color 80,80,80
+bigDataUrl ../data/ChIP-seq_S.solfataricus/Cbp1_expon_r2.normRatio.bw
+
+track Cren7
+group ChIP-seq
+container multiWig
+shortLabel Cren7
+longLabel Cren7 ChIP-seq
+type bigWig
+#viewLimits 0:160
+visibility full
+aggregate transparentOverlay
+graphTypeDefault points
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 90
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track Cren7_r1
+longLabel Cren7 replicate 1
+shortLabel Cren7 r1
+group ChIP-seq
+parent Cren7
+visibility pack
+type bigWig
+color 124,190,181
+bigDataUrl ../data/ChIP-seq_S.solfataricus/Cren7_SsoP2.r1.normRatio.bw
+
+track Cren7_r2
+longLabel Cren7 replicate 2
+shortLabel Cren7 r2
+group ChIP-seq
+parent Cren7
+visibility pack
+type bigWig
+color 124,190,181
+bigDataUrl ../data/ChIP-seq_S.solfataricus/Cren7_SsoP2.r2.normRatio.bw
+
+
+track Cbp1_exo
+group ChIP-exo
+container multiWig
+shortLabel Cbp1 ChIP-exo
+longLabel Cbp1 ChIP-exo
+type bigWig
+#viewLimits 0:160
+visibility full
+aggregate transparentOverlay
+graphTypeDefault bar
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 95
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track Cbp1_exo_plus
+longLabel Cbp1 ChIP-exo plus strand
+shortLabel Cbp1 ChIP-exo frw
+group ChIP-exo
+parent Cbp1_exo
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../data/ChIP-exo_S.solfataricus/Cbp1_sso_gm.plus.bw
+
+track Cbp1_exo_minus
+longLabel Cbp1 ChIP-exo minus strand
+shortLabel Cbp1 ChIP-exo frw
+group ChIP-exo
+parent Cbp1_exo
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../data/ChIP-exo_S.solfataricus/Cbp1_sso_gm.minus.bw
+
+
+track Cren7_exo
+group ChIP-exo
+container multiWig
+shortLabel Cren7 ChIP-exo
+longLabel Cren7 ChIP-exo
+type bigWig
+#viewLimits 0:160
+visibility full
+aggregate transparentOverlay
+graphTypeDefault bar
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 95
+configurable on
+autoScale on
+maxHeightPixels 50
+
+track Cren7_exo_plus
+longLabel Cren7 ChIP-exo plus strand
+shortLabel Cren7 ChIP-exo frw
+group ChIP-exo
+parent Cren7_exo
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../data/ChIP-exo_S.solfataricus/CreN7_sso_gm.plus.bw
+
+track Cren7_exo_minus
+longLabel Cren7 ChIP-exo minus strand
+shortLabel Cren7 ChIP-exo frw
+group ChIP-exo
+parent Cren7_exo
+visibility pack
+type bigWig
+color 10,10,10
+bigDataUrl ../data/ChIP-exo_S.solfataricus/CreN7_sso_gm.minus.bw
+
+track peaks_MACS2
+group peaks
+superTrack on show
+shortLabel Called peaks
+longLabel Peaks called with MACS2
+#viewLimits 0:160
+visibility full
+aggregate transparentOverlay
+showSubtrackColorOnUi on
+windowingFunction maximum
+priority 20
+configurable on
+autoScale on
+
+track Cbp1_peaks_expon
+longLabel Cbp1 peaks exponential growth, IDR 0.05, minum 5-fold enrichment
+shortLabel Cbp1 peaks expon
+group peaks
+parent peaks_MACS2
+type bigBed 5
+bigDataUrl ../data/SsoCbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bigBed
+visibility squish
+
+

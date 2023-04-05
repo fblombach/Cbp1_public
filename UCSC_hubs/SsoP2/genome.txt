@@ -1,0 +1,9 @@
+genome NC_002754
+trackDb trackDb.txt
+groups groups.txt
+description S. soflataricus P2
+twoBitPath ../genome_data/SsoP2/NC_002754.2bit
+organism Saccharolobus solfataricus
+defaultPos NC_002754:46880-50000
+orderKey 4700
+scientificName Saccharolobus solfataricus
