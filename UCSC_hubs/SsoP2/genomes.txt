@@ -4,6 +4,6 @@ groups groups.txt
 description S. soflataricus P2
 twoBitPath ../../genome_data/SsoP2/NC_002754.2bit
 organism Saccharolobus solfataricus
-defaultPos gi|15896971|ref|NC_002754.1|:46880-50000
 orderKey 4700
 scientificName Saccharolobus solfataricus
+defaultPos gi|15896971|ref|NC_002754.1|:1-1000
