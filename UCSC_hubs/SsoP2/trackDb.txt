@@ -6,7 +6,7 @@ priority 100
 visibility hide
 itemRgb On
 type bigBed 9 +
-bigDataUrl ../genome_data/SsoP2/Wurtzel.gff
+bigDataUrl ../../genome_data/SsoP2/Wurtzel.gff
 searchIndex name,geneProduct
 
 track Cbp1
@@ -34,7 +34,7 @@ parent Cbp1
 visibility pack
 type bigWig
 color 10,10,10
-bigDataUrl ../data/ChIP-seq_S.solfataricus/Cbp1_expon_r1.normRatio.bw
+bigDataUrl ../../data/ChIP-seq_S.solfataricus/Cbp1_expon_r1.normRatio.bw
 
 track Cbp1_r2
 longLabel Cbp1 replicate 2
@@ -44,7 +44,7 @@ parent Cbp1
 visibility pack
 type bigWig
 color 80,80,80
-bigDataUrl ../data/ChIP-seq_S.solfataricus/Cbp1_expon_r2.normRatio.bw
+bigDataUrl ../../data/ChIP-seq_S.solfataricus/Cbp1_expon_r2.normRatio.bw
 
 track Cren7
 group ChIP-seq
@@ -71,7 +71,7 @@ parent Cren7
 visibility pack
 type bigWig
 color 124,190,181
-bigDataUrl ../data/ChIP-seq_S.solfataricus/Cren7_SsoP2.r1.normRatio.bw
+bigDataUrl ../../data/ChIP-seq_S.solfataricus/Cren7_SsoP2.r1.normRatio.bw
 
 track Cren7_r2
 longLabel Cren7 replicate 2
@@ -81,7 +81,7 @@ parent Cren7
 visibility pack
 type bigWig
 color 124,190,181
-bigDataUrl ../data/ChIP-seq_S.solfataricus/Cren7_SsoP2.r2.normRatio.bw
+bigDataUrl ../../data/ChIP-seq_S.solfataricus/Cren7_SsoP2.r2.normRatio.bw
 
 
 track Cbp1_exo
@@ -109,7 +109,7 @@ parent Cbp1_exo
 visibility pack
 type bigWig
 color 10,10,10
-bigDataUrl ../data/ChIP-exo_S.solfataricus/Cbp1_sso_gm.plus.bw
+bigDataUrl ../../data/ChIP-exo_S.solfataricus/Cbp1_sso_gm.plus.bw
 
 track Cbp1_exo_minus
 longLabel Cbp1 ChIP-exo minus strand
@@ -119,7 +119,7 @@ parent Cbp1_exo
 visibility pack
 type bigWig
 color 10,10,10
-bigDataUrl ../data/ChIP-exo_S.solfataricus/Cbp1_sso_gm.minus.bw
+bigDataUrl ../../data/ChIP-exo_S.solfataricus/Cbp1_sso_gm.minus.bw
 
 
 track Cren7_exo
@@ -147,7 +147,7 @@ parent Cren7_exo
 visibility pack
 type bigWig
 color 10,10,10
-bigDataUrl ../data/ChIP-exo_S.solfataricus/CreN7_sso_gm.plus.bw
+bigDataUrl ../../data/ChIP-exo_S.solfataricus/CreN7_sso_gm.plus.bw
 
 track Cren7_exo_minus
 longLabel Cren7 ChIP-exo minus strand
@@ -157,7 +157,7 @@ parent Cren7_exo
 visibility pack
 type bigWig
 color 10,10,10
-bigDataUrl ../data/ChIP-exo_S.solfataricus/CreN7_sso_gm.minus.bw
+bigDataUrl ../../data/ChIP-exo_S.solfataricus/CreN7_sso_gm.minus.bw
 
 track peaks_MACS2
 group peaks
@@ -179,7 +179,7 @@ shortLabel Cbp1 peaks expon
 group peaks
 parent peaks_MACS2
 type bigBed 5
-bigDataUrl ../data/SsoCbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bigBed
+bigDataUrl ../../data/SsoCbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bigBed
 visibility squish
 
 
