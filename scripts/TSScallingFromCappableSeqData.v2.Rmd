@@ -1,0 +1,299 @@
+---
+title: "TSScallingFromCappableSeq-data"
+author: "Fabian Blombach"
+date: "02/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+wt.r1.fw <- "../data/Cappable-seq_S.islandicus/E234_r1.5primeCov.plus.bw"
+wt.r1.rv <- "../data/Cappable-seq_S.islandicus/E234_r1.5primeCov.minus.bw"
+wt.r2.fw <- "../data/Cappable-seq_S.islandicus/E234_r2.5primeCov.plus.bw"
+wt.r2.rv <- "../data/Cappable-seq_S.islandicus/E234_r2.5primeCov.minus.bw"
+
+ko.r1.fw <- "../data/Cappable-seq_S.islandicus/cbp1_r1.5primeCov.plus.bw"
+ko.r1.rv <- "../data/Cappable-seq_S.islandicus/cbp1_r1.5primeCov.minus.bw"
+ko.r2.fw <- "../data/Cappable-seq_S.islandicus/cbp1_r2.5primeCov.plus.bw"
+ko.r2.rv <- "../data/Cappable-seq_S.islandicus/cbp1_r2.5primeCov.minus.bw"
+
+#CRISPR loci
+crispr_loci <- read.table("../genome_data/SislREY15A/crispr_loci.SislREY15A.bed")
+
+#CRISPR leader TSS positions based on manual data inspection of cappable-seq data
+crispr_leader <- data.frame(V1=rep("NC_017276.1",2), V2=c(732605,736615), V3=c(732615,736625), V4=c("locus_id2", "locus_id3"), V5=rep(0,2), V6=c("-","+"))  
+#summit position of non-CRISPR Cbp1 binding sites
+#nonCRISPR <- read.table("../data/SislCbp1_pooled_idrFilteredPeaks_summits.bed") #all peaks
+nonCRISPR <- read.table("../data/SislCbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bed") #peaks with minimum 5x enrichment
+#nonCRISPR <- read.table("../data/MEME_motif_coordinates/motifStart_coordinates_SislREY15A.bed") #associated Cbp1 binding motifs 
+
+
+#S. islandicus REY15A genome annotation
+sisl.genome <- read.delim("../genome_data/SislREY15A/GCF_000189555.1_ASM18955v1_genomic.gff", skip=7, header=F)
+
+
+require(rtracklayer)
+require(DESeq2)
+require(ggplot2)
+require(RVAideMemoire)
+require(LSD)
+```
+
+
+```{r TSS candidates}
+bigWigFiles<-c(wt.r1.fw, wt.r2.fw, ko.r1.fw, ko.r2.fw)
+bigWigFiles.rv<-c(wt.r1.rv, wt.r2.rv, ko.r1.rv, ko.r2.rv)
+
+TSS <- data.frame(matrix(ncol=4, nrow=2*2522992))
+colnames(TSS) <- c("wt.r1", "wt.r2", "ko.r1", "ko.r2")
+c.incr<- 20 #cut-off values for total and relative increase of signal compared to preceding position
+c.ratio<- 5
+
+for(i in 1:4){
+  x<-unlist(import.bw(bigWigFiles[i], as = "NumericList")[[1]])
+  x.rv<-unlist(import.bw(bigWigFiles.rv[i], as = "NumericList")[[1]])
+  y<-vector(mode = "logical", length = length(x))
+  y.rv<-vector(mode = "logical", length = length(x))
+  #loop for fw bigwig file
+  for (j in 2:length(x)){
+    if(x[j] - x[j-1] >= c.incr & x[j] / x[j-1] >= c.ratio){
+      y[j] <- T
+    }
+  }
+  #loop for fw bigwig file
+  for (k in 1:(length(x)-1)){
+    if(x.rv[k] - x.rv[k+1] >= c.incr & x.rv[k] / x.rv[k+1] >= c.ratio){
+      y.rv[k] <- T
+    }
+  }
+TSS[,i]<- c(y, y.rv)
+}
+summary(TSS)
+
+
+colnames(TSS)<- c("wt.r1", "wt.r2", "ko.r1", "ko.r2")
+TSS$genomePos<-rep(1:2522992,2)
+TSS$strand<-c(rep("+", 2522992), rep("-", 2522992))
+
+cor(TSS[,1:4])
+
+TSS$n.cons <- rowSums(TSS[,1:4])
+summary(as.factor(TSS$n.cons))
+
+TSS$n.cons.wt <- rowSums(TSS[,1:2])
+summary(as.factor(TSS$n.cons.wt))
+TSS$n.cons.ko <- rowSums(TSS[,3:4])
+summary(as.factor(TSS$n.cons.ko))
+
+```
+
+
+```{r clustering close TSSs}
+#call TSSs consistent between replicates of at least one condition
+TSS.called <- as.data.frame(TSS$genomePos[TSS$n.cons >= 2])
+colnames(TSS.called)<-"genomePos"
+TSS.called$strand <- TSS$strand[TSS$n.cons >= 2]
+#filter out TSSs within the cbp1 gene
+TSS.called.filt<- TSS.called[!(TSS.called$genomePos %in% 1440640:1441370), ]
+
+
+#join positions clusterering together within 5 bp distance
+  #calculating initial TSS distance
+distance.TSS<- vector() 
+for(i in 2:nrow(TSS.called.filt)){
+  distance.TSS[i] <- abs(TSS.called.filt$genomePos[i] - TSS.called.filt$genomePos[i-1])
+}
+
+distance.TSS.cur<-distance.TSS
+TSS.called.init<-TSS.called.filt
+repeat {
+#cluster TSSs closer than 5bp distance together
+TSS.called.cur<-data.frame(matrix(ncol=2, nrow=nrow(TSS.called.init)))
+colnames(TSS.called.cur) <- colnames(TSS.called.init)
+for(i in 1:length(distance.TSS.cur)){
+  if(is.na(distance.TSS.cur)[i]==F & distance.TSS.cur[i] <= 5)
+  {x <- c(ceiling(mean(TSS.called.init[(i-1):i,1])), TSS.called.init[i,2])
+    TSS.called.cur[i,] <- x}
+  else {if(i < length(distance.TSS.cur) & distance.TSS.cur[i+1] <= 5)
+  {x <- c(ceiling(mean(TSS.called.init[i:(i+1),1])), TSS.called.init[i,2])
+    TSS.called.cur[i,]<- x}
+  else {TSS.called.cur[i,]<-TSS.called.init[i,]}
+  }
+}
+TSS.called.init<-unique(TSS.called.cur) 
+TSS.called.init$genomePos<-as.numeric(TSS.called.init$genomePos)
+distance.TSS.cur <- vector() 
+for(i in 2:nrow(TSS.called.init)){
+  distance.TSS.cur[i] <- abs(TSS.called.init$genomePos[i] - TSS.called.init$genomePos[i-1])
+}
+#report numbers of TSSs still within cluster distance of 5 bp
+print(sum(distance.TSS.cur[!is.na(distance.TSS.cur)] <= 5))
+if (min(distance.TSS.cur[!is.na(distance.TSS.cur)]) > 5){
+  TSS.called.final<-TSS.called.init
+  break
+  }
+}
+```
+
+
+```{r count signal over 11 bp window}
+countData <- matrix(1:(4*nrow(TSS.called.final)),ncol=4)
+for(i in 1:4){
+  x.fw<-unlist(import.bw(bigWigFiles[i], as = "NumericList")[[1]])
+  x.rv<-unlist(import.bw(bigWigFiles.rv[i], as = "NumericList")[[1]])
+  x<-c(x.fw, x.rv)
+  y<-vector()
+  for(j in 1:nrow(TSS.called.final)){
+    if(TSS.called.final$strand[j]=="+")
+      z<-sum(x[(TSS.called.final$genomePos[j]-5):(TSS.called.final$genomePos[j]+5)])
+    
+    if(TSS.called.final$strand[j]=="-")
+    
+      z<-sum(x[(TSS.called.final$genomePos[j]-5+2522992):(TSS.called.final$genomePos[j]+5+2522992)])
+    
+    y[j]<-z
+  }
+  countData[,i]<-y
+}
+  
+condition <- factor(c("wt","wt","ko","ko"))
+    
+dds <- DESeqDataSetFromMatrix(countData, DataFrame(condition), ~ condition)
+dds <- DESeq(dds)
+deseq.results<-results(dds)
+
+plotMA(deseq.results, ylim=c(-10,10))
+
+TSS.called.final[deseq.results$log2FoldChange >2,]
+```
+
+```{r volcano plot}
+deseq.results.df <-data.frame(baseMean = deseq.results$baseMean,
+                              log2FoldChange = deseq.results$log2FoldChange,
+                              padj = deseq.results$padj)
+
+crispr.filt <-  TSS.called.final$genomePos %in% crispr_loci[1,2]:crispr_loci[1,3] |
+                TSS.called.final$genomePos %in% crispr_loci[2,2]:crispr_loci[2,3]
+
+
+nonCRISPR.filt <- vector(length = nrow(TSS.called.final))
+for (i in 1: nrow(TSS.called.final)){
+  x <- min(abs(TSS.called.final$genomePos[i] -  nonCRISPR$V3)) <= 50
+  nonCRISPR.filt[i] <- x
+}
+summary(nonCRISPR.filt) 
+
+leader.filt <- TSS.called.final$genomePos %in% crispr_leader[1,2]:crispr_leader[1,3] |
+               TSS.called.final$genomePos %in% crispr_leader[2,2]:crispr_leader[2,3]
+
+
+#volcano plot
+
+#set limit for -log10 padj
+p.lim = 60
+
+g <- ggplot(data=deseq.results.df[!crispr.filt & !nonCRISPR.filt,]) + 
+     geom_hline(aes(yintercept = 2), show.legend = F, lty = 2) +
+     geom_point(aes(x=log2FoldChange, y= ifelse(-log(padj,10) < p.lim, -log(padj,10), p.lim), shape = ifelse(-log(padj,10) < p.lim, "16", "17")), cex=1, alpha=0.05)
+g <- g  + geom_point(data=deseq.results.df[nonCRISPR.filt,] ,    aes(x=log2FoldChange, y= ifelse(-log(padj,10) < p.lim, -log(padj,10), p.lim), shape = ifelse(-log(padj,10) < p.lim, "16", "17")), colour="#1289A7", cex=1, alpha=0.8)
+g <- g  + geom_point(data=deseq.results.df[crispr.filt,] , 
+                     aes(x=log2FoldChange, y= ifelse(-log(padj,10) < p.lim, -log(padj,10), p.lim), shape = ifelse(-log(padj,10) < p.lim, "16", "17")), colour="#FFC312", cex=1, alpha=0.8)
+g <- g + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank()) +
+  scale_x_continuous(limits=c(-11,11), breaks=seq(-10, 10,by=2), expand = c(0, 0)) +
+  scale_y_continuous(limits=c(-1, p.lim+1), breaks=seq(0, 120, by=20), expand = c(0, 0)) +
+  ylab("log10(padj)") +
+  xlab("log2-fold change") +
+  theme(legend.position='none')
+g
+ggplot2::ggsave("../plots/TSS.deseq.png", plot = g, device = "png", path = NULL,
+       scale = 1, width = 80, height = 80, units = c("mm"), limitsize = TRUE)
+```
+
+
+
+```{r Fisher test categories}
+#checking fraction of each category with significant changes
+summary(deseq.results$padj < 0.01)
+summary(deseq.results$padj[!crispr.filt & !nonCRISPR.filt] < 0.01)
+summary(deseq.results$padj[nonCRISPR.filt] < 0.01)
+summary(deseq.results$padj[crispr.filt] < 0.01)
+
+# fraction of genes called to be differentially regulated (padj < 0.01)
+as.numeric(summary(deseq.results$padj < 0.01)[3])/length(deseq.results$padj)
+
+#Fisher's exact test for enrichment of upregulated TSS RNAs upon cbp1 deletion
+up.m<-matrix(c(sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange < 0] < 0.01),
+                     sum(crispr.filt) - sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange < 0] < 0.01),
+                     sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange < 0] < 0.01),
+                     sum(nonCRISPR.filt) - sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange < 0] < 0.01),
+                     sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange < 0] < 0.01),
+                     sum(!crispr.filt & !nonCRISPR.filt) - sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange < 0] < 0.01)),
+                     nrow=2)
+up.m
+p.CRISPR.up<-fisher.test(up.m[,c(1,3)])$p.value
+p.nonCRISPR.up<-fisher.test(up.m[,c(2,3)])$p.value
+
+
+#Fisher's exact test for enrichment of downregulated TSS RNAs upon cbp1 deletion
+down.m <- matrix(c(sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange > 0] < 0.01),
+                     sum(crispr.filt) - sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange > 0] < 0.01),
+                     sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange > 0] < 0.01),
+                     sum(nonCRISPR.filt) - sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange > 0] < 0.01),
+                     sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange > 0] < 0.01),
+                     sum(!crispr.filt & !nonCRISPR.filt) - sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange > 0] < 0.01)),
+                     nrow=2)
+down.m
+p.CRISPR.down<-fisher.test(down.m[,c(1,3)])$p.value
+p.nonCRISPR.down<-fisher.test(down.m[,c(2,3)])$p.value
+
+#manual bonferroni correction
+p.vec<-c(p.CRISPR.up, p.nonCRISPR.up, p.CRISPR.down, p.nonCRISPR.down)
+p.adjust(p.vec, method="bonferroni")
+```
+
+```{r identify TSSs regulated by Cbp1}
+deseq.results.df[nonCRISPR.filt,][deseq.results.df[nonCRISPR.filt,]$padj < 0.01,]
+TSS.called.final[nonCRISPR.filt,][deseq.results.df[nonCRISPR.filt,]$padj < 0.01,]
+
+#exporting those TSSs upregulated in cbp1 deletion strain
+ex <- TSS.called.final[nonCRISPR.filt,][deseq.results.df[nonCRISPR.filt,]$padj < 0.01 & deseq.results.df[nonCRISPR.filt,]$log2FoldChange < 0,]
+data.bed <- data.frame(rep(sisl.genome[1,1], times=nrow(ex)), ex$genomePos-1, ex$genomePos, rep("TSS", times=nrow(ex)), rep("*", times=nrow(ex)), ex$strand)
+write.table(data.bed, "temp/TSSs.Cbp1Associated.upregulatedInCbp1DeletionStrain.bed", quote=F, row.names=F, col.names=F, sep = "\t")
+```
+
+
+
+```{r identify TSSs regulated by Cbp1 in CRISPR arrays}
+deseq.results.df[crispr.filt,][deseq.results.df[crispr.filt,]$padj < 0.01,]
+TSS.called.final[crispr.filt,][deseq.results.df[crispr.filt,]$padj < 0.01,]
+
+```
+
+Plotting fractions of significantly up- and down-regulated genes for each category
+```{r plot fraction regulated}
+df <-data.frame(abs=c(up.m[1,], down.m[1,]), frac=c(up.m[1,]/colSums(up.m),down.m[1,]/colSums(down.m)), type=rep(c("CRISPR arrays", "non-CRISPR binding sites", "not Cbp1 associated"),2), dir=c(rep("increase",3), rep("decrease",3)))
+g1 <- ggplot(data=df, aes(x=dir, y=frac, group=type)) + geom_col(aes(fill=type), position="dodge")
+g1 <- g1 + geom_text(aes(label=abs), position=position_dodge(0.9), vjust=-0.5) #add absolute counts for each group as label
+g1 <- g1 + scale_y_continuous("fraction", limits=c(0,1), expand=c(0,0)) + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank())
+g1 <- g1 + scale_fill_manual(values=c("#FFC312", "#1289A7", "#1B1464")) + xlab("Relative abundance of TSS RNAs in deltaCbp1")
+g1
+
+ggsave("../plots/TSS.deseq.bargraph.pdf", plot = g1, path = NULL,
+       scale = 1, width = 160, height = 160, units = c("mm"), limitsize = TRUE)
+```
+
+```{r QC scatter plots for replicates}
+cor(countData, method="spearman")
+
+par(mfrow=c(3,3), mar=c(5,4,2,2))
+for(i in 2:4){
+  for(j in 1:3){
+    out <- heatscatter(countData[,i], countData[,j], log="xy", xlab="", ylab="", main="", xlim=c(1,10^6), ylim=c(1,10^6), cex=0.2)
+  }
+}
+
+
+```
+
+
