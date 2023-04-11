@@ -1,0 +1,143 @@
+---
+title: "ISC1229bindingByCbp1"
+author: "Fabian Blombach"
+date: '2023-03-09'
+output: html_document
+---
+
+This scripts visualises Cbp1 binding sites on ISC1229 transposons in S. solfataricus P2 belonging to the IS110 family.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+require(ggplot2)
+require(seqvisr) #"devtools" needs to be installed before installation of "seqvisr" available at https://github.com/vragh/seqvisr
+require(rtracklayer)
+require(cowplot)
+require(Biostrings)
+  
+ISC1229 <- "../genome_data/SsoP2/ISC1229.bed"
+#Input MSA file
+inpmsa <- "../genome_data/SsoP2/ISC1229.aligned.gapRemov.fasta" #Fasta format multiple alignment file for ISC1229 transposons
+
+
+
+genome <- "../genome_data/SsoP2/NC_002754.fna"
+cbp1_sites <- "../data/MEME_motif_coordinates/motifStart_coordinates_SsoP2.bed"
+sizes <- "../genome_data/SsoP2/NC_002754.sizes"
+
+
+gff <- import.gff3("../genome_data/SsoP2/Wurtzel.gff")  
+
+Sys.setenv(genome = genome, ISC1229 = ISC1229, cbp1_sites = cbp1_sites, sizes = sizes)
+```
+
+
+
+```{bash intersect with Cbp1 motif sites}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/envs/py3712/bin
+
+#find Cbp1 sites that overlap 
+bedtools slop -s -l 0 -r 20 -i $cbp1_sites -g $sizes > temp/Cbp1_sites.slop.bed 
+bedtools intersect -wo -a temp/Cbp1_sites.slop.bed -b $ISC1229 > temp/Cbp1_ISC1229.intersect.bed
+bedtools getfasta -s -fi $genome -bed temp/Cbp1_ISC1229.intersect.bed -fo temp/Cbp1sites_ISC1229.intersect.fasta
+```
+
+```{r align motifs to aligned transposons}
+transposons_aligned <- readDNAStringSet("../genome_data/SsoP2/ISC1229.aligned.gapRemov.fasta")
+transposons_start <- sapply(strsplit(names(transposons_aligned), "-"),"[[",1) #get start sites from names of transposons in fasta file
+cbp1_sites.imp <- readDNAStringSet("temp/Cbp1sites_ISC1229.intersect.fasta")
+cbp1_sites.intersect <- read.table("temp/Cbp1_ISC1229.intersect.bed")
+
+#create Multifeatures list for plotting of Cbp1 binding sites with seqvisr listing matching transposon, position relative to reference transposon, and orientation forward/reverse (forward defined as orientation of motifs in CRISPR repeats) 
+multfeatures <- list()
+for (i in 1:nrow(cbp1_sites.intersect)){
+  #matching transposon
+  k <- which(transposons_start == cbp1_sites.intersect$V8[i])
+  a <- names(transposons_aligned)[k]
+  #determine index in aligned transposon fasta file
+  j <- which(names(transposons_aligned) == a)
+  #orientation and matching position
+  if(cbp1_sites.intersect$V6[i] == cbp1_sites.intersect$V12[i]){
+    c <- "forward"
+    b1 <- as.numeric(unlist(start(matchPDict(DNAStringSet(cbp1_sites.imp[[i]]),transposons_aligned[[j]], max.mismatch=0, with.indels=F))))
+    b <- b1:(b1+20)
+  } else {
+    c <- "reverse"
+    b1 <- as.numeric(unlist(start(matchPDict(reverseComplement(DNAStringSet(cbp1_sites.imp[[i]])),transposons_aligned[[j]], max.mismatch=0, with.indels=F))))
+    b <- (b1-20):b1
+    }
+    x <- c(a,b,c)
+  multfeatures[[i]] <- x
+}
+
+```
+
+
+```{r seqvisr plot}
+#Highlighting the Cbp1 binding sites did not work as intended. Instead of highlighting sites on individual sequences, the position of the site is highlighted in all sequences. For this reason I exported plots with and wihout the Cbp1 sites and manually draw the rectangles highlighting the Cbp1 binding sites in inkscape based on an overaly of the two plots.
+
+#with highlighting the cbp1 binding sites
+g1 <- msavisr(mymsa = inpmsa, myref = "1745648-1746880(+)/1-1232", wnon = 2.0, myroi = multfeatures, wroi = 8.0, hroi = 0.6, cbfcols = TRUE, basecolors = c("Grey", "Darkred", "White"), roicolors = c("Green", "Green")) + theme(legend.position = 'none')
+#without highlighting the cbp1 binding sites
+g2 <- msavisr(mymsa = inpmsa, myref = "1745648-1746880(+)/1-1232", wnon = 2.0, cbfcols = TRUE, basecolors = c("Grey", "Darkred", "White")) + theme(legend.position = 'none')
+g1
+g2
+```
+
+```{r save plots}
+ggsave("../plots/ISC1229_alignment.png", g2,
+       width = 10, height = 10, bg="transparent")
+ggsave("../plots/ISC1229_alignment.withCbp1sites.png", g1,
+       width = 10, height = 10, bg="transparent")
+```
+
+
+Creating ChIP-seq occupancy plots for individual binding sites
+```{r plotting Cbp1 ChIP-seq occupancy}
+# set theme for plotting traces
+theme_chip<- function (base_size = 11, base_family = "") 
+{
+  theme_grey(base_size = base_size, base_family = base_family)
+    theme(panel.background = element_rect(fill = "transparent"),
+          plot.background = element_rect(fill = "transparent", color = NA),
+          panel.border = element_rect(fill = NA, colour = "grey20"),
+          panel.grid.major = element_blank(), 
+
+          panel.grid.minor = element_blank(), strip.background = element_rect(fill = "grey85", 
+          colour = "grey20"), legend.key = element_rect(fill = "white", colour = NA),
+                        axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank(),
+          axis.title.y=element_blank(), plot.margin = unit(c(1,1,0,1), "mm"), complete = TRUE)
+}
+
+lmCBP1 = 400
+MotifPos<-data.frame(xmin=241, xmax= 260, ymin=1, ymax= lmCBP1) #data frame to create rectangle in plot showing Cbp1 motif position
+
+bindingSite.data <- read.table("temp/Cbp1_ISC1229.intersect.bed")
+
+for(i in 1:nrow(bindingSite.data)){
+start <- bindingSite.data[i,2] -239
+end <- bindingSite.data[i,3] +240
+coord <- IRangesList("gi|15896971|ref|NC_002754.1|" = IRanges::IRanges(start, end))
+
+CBP1_1 <- import.bw("../data/ChIP-seq_S.solfataricus/Cbp1_expon_r1.normRatio.bw", selection = coord, as="NumericList")
+CBP1_2 <- import.bw("../data/ChIP-seq_S.solfataricus/Cbp1_expon_r2.normRatio.bw", selection = coord, as="NumericList")
+
+CBP1<- data.frame(r1=data.frame(CBP1_1)[,3], r2=data.frame(CBP1_2)[,3])
+CBP1$mean <- rowMeans(CBP1)
+
+pCBP1<-ggplot() + 
+  geom_rect(data=MotifPos, mapping=aes(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax), 
+            color=NA, fill="#bfe4ee") +
+  geom_line(data = CBP1, aes(x=c(1:(end-start+1)),y=mean), colour="#4e4aa4", linewidth=0.5) + 
+  geom_ribbon(data = CBP1, aes(x=c(1:(end-start+1)), ymin=1, ymax=mean), fill="#4e4aa4") + theme_chip()  + 
+  scale_y_continuous(breaks = c(lmCBP1), limits = c(1, lmCBP1), expand = c(0, 0), position="right") +
+  scale_x_continuous(expand = c(0, 0), limits = c(1,(end-start+1)))   
+
+ggsave(paste0("../plots/occupancyPlot.Cbp1.ISC1229site.", start, "to", end, ".pdf"), pCBP1,
+       width = 5, height = 2, bg="transparent", units="in")
+}
+
+
+
+```
+

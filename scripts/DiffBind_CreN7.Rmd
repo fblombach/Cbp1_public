@@ -1,0 +1,122 @@
+---
+title: "DiffBind_CreN7"
+author: "Fabian Blombach"
+date: "02/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#CreN7 ChIP-seq data (bam files) for S.islandicus cbp1 ko and parental (WT) strain
+#Bam files were generated as described in https://www.biorxiv.org/content/10.1101/2023.03.24.534125v1
+
+WT1 <- "~/HTS/alignments/18452R/X17_Cren7_Sis_E234.r1.mean120.sd18.sorted.bam"
+WT2 <- "~/HTS/alignments/18452R/X18_Cren7_Sis_E234.r2.mean120.sd18.sorted.bam"
+ko1 <- "~/HTS/alignments/18452R/X15_Cren7_Sis_cbp1-.r1.mean120.sd18.sorted.bam"
+ko2 <- "~/HTS/alignments/18452R/X16_Cren7_Sis_cbp1-.r2.mean120.sd18.sorted.bam"
+
+#coordinates of CRISPR loci
+crispr_loci <- "../genome_data/SislREY15A/crispr_loci.SislREY15A.bed"
+ 
+#summit position of non-CRISPR Cbp1 binding sites
+nonCRISPR <- "../data/SislCbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bed"
+
+require(csaw)
+require(edgeR)
+require(statmod)
+require(rtracklayer)
+require(ggplot2)
+
+Sys.setenv(crispr_loci = crispr_loci, nonCRISPR = nonCRISPR)
+```
+
+
+```{r data import}
+#filter regions deleted in cbp1 ko strain
+del <- GRanges("NC_017276.1", IRanges(start=c(607750, 1440640), end=c(635250,1441370)))
+
+param<-readParam(max.frag=250, minq=NA, discard=del)
+bam.files <- c(WT1, WT2, ko1, ko2)
+data <- windowCounts(bam.files, width=30, spacing= 30, param=param, filter = 20)
+head(data)
+
+# to check
+data$totals
+# will give you the library sizes
+```
+```{r data filtering}
+abundances <- aveLogCPM(asDGEList(data))
+keep <- abundances > aveLogCPM(20, lib.size=mean(data$totals))
+summary(keep)
+filtered.data <- data[keep,]
+```
+
+
+Write bin coordinates into bed file
+```{r}
+export.bed(rowRanges(filtered.data), "temp/binCoordinates.bed")
+```
+
+Calculate overlap with CRISPR arrays and nonCRISPR binding sites of Cbp1
+```{bash}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/bin
+
+bedtools window -c -w 30 -a temp/binCoordinates.bed -b $nonCRISPR > temp/nonCRISPRoverlap.Sisl.bed
+
+bedtools window -c -w 30 -a temp/binCoordinates.bed -b $crispr_loci> temp/crispr_loci_overlap.Sisl.bed
+```
+
+```{r}
+#read in files with overlapping bins and merge with coverage data
+crisprOverlap <- read.table("temp/crispr_loci_overlap.Sisl.bed")
+crispr.filt <- as.logical(crisprOverlap$V7)
+
+nonCRISPRoverlap <- read.table("temp/nonCRISPRoverlap.Sisl.bed")
+nonCRISPR.filt <- as.logical(nonCRISPRoverlap$V7)
+```
+
+
+
+
+```{r calling db windows}
+y <- asDGEList(filtered.data)
+group <- factor(c(0,0,1,1))
+design <- model.matrix(~group)
+y <- estimateDisp(y, design)
+summary(y$trended.dispersion)
+fit <- glmQLFit(y, design, robust=TRUE)
+summary(fit$var.post)
+results <- glmQLFTest(fit, contrast=c(0, 1)) 
+sum(p.adjust(results$table$PValue, method="BH") < 0.01)
+
+#add padj to results
+results$table$padj <- p.adjust(results$table$PValue, method="BH")
+```
+
+```{r MDS plot for QC}
+#Reproducibility between replicates can be assessed with MDS plots (PCA)
+par(mfrow=c(2,2), mar=c(5,4,2,2)) 
+adj.counts <- cpm(y, log=TRUE) 
+for (top in c(100, 500, 1000, 5000)) { 
+  out <- plotMDS(adj.counts, main=top, col=c("blue", "blue", "red", "red"), 
+                 labels=c("1", "2", "3", "4"), top=top) 
+}
+```
+
+```{r volcano plot}
+g <- ggplot(data=results$table[!crispr.filt & !nonCRISPR.filt,]) + 
+     geom_hline(aes(yintercept = 2), show.legend = F, lty = 2) +
+     geom_point(aes(x=logFC, y= -log(padj,10)), cex=1, alpha=0.5)
+g <- g  + geom_point(data=results$table[nonCRISPR.filt,] ,    aes(x=logFC, y= -log(padj,10)), colour="#1289A7", cex=1, alpha=0.5)
+g <- g  + geom_point(data=results$table[crispr.filt,] ,    aes(x=logFC, y= -log(padj,10)), colour="#FFC312", cex=1, alpha=0.5)
+g <- g + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank()) +
+  scale_x_continuous(limits=c(-4,4), breaks=seq(-4, 4,by=2), expand = c(0, 0)) +
+  scale_y_continuous(limits=c(0,30), breaks=seq(0, 35, by=5), expand = c(0, 0)) +
+  ylab("log10(padj)") +
+  xlab("log2-fold change") 
+g
+ggplot2::ggsave("../plots/diffBind_Cren7.png", plot = g, device = "png", path = NULL,
+       scale = 1, width = 80, height = 80, units = c("mm"), limitsize = TRUE)
+```
+
