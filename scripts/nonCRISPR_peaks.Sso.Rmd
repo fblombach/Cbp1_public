@@ -1,0 +1,105 @@
+---
+title: "non-CRISPR_peaks.Sso"
+author: "Fabian Blombach"
+date: "25/08/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+require(universalmotif)
+require(seqinr)
+require(dplyr)
+
+#genomic sequence
+genomeFasta <- "../genome_data/SsoP2/NC_002754.fna"
+genomeSizes <- "../genome_data/SsoP2/NC_002754.sizes"
+#curated ChIP-seq peak set with min 5-fold enrichment 
+summits <- "../data/SsoCbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bed"
+summits.file<-read.table(summits)
+bckgr <- "../genome_data/SsoP2/Sso_background_model.prn"
+crispr <- "../genome_data/SsoP2/crispr_loci.bed"
+
+Sys.setenv(genomeFasta = genomeFasta, genomeSizes = genomeSizes, summits = summits, bckgr = bckgr)
+```
+
+
+```{bash MEME motif identification}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/bin
+if [ -d temp]; then rm -Rf temp; fi
+mkdir temp
+if [ -d temp/MEME ]; then rm -Rf temp/MEME; fi
+
+bedtools slop -i $summits -g $genomeSizes -b 80 > temp/PeaksSlop.bed
+bedtools getfasta -s -name -fi $genomeFasta -bed temp/PeaksSlop.bed -fo temp/Peaks.fasta
+
+meme temp/Peaks.fasta -oc temp/MEME_Sso -dna -nmotifs 1 -mod oops -revcomp  -bfile $bckgr
+
+glam2 -Q -O . -M -2 -z 2 -a 2 -b 50 -w 20 -r 10 -n 2000 -D 0.1 -E 2.0 -I 0.02 -J 1.0 n temp/Peaks.fasta -oc temp/GLAM2_Sso #GLAM2 for gapped motifs
+```
+
+```{r meme_import}
+#importing meme data with position and pvalue of individual motif occurences
+meme<-read_meme("temp/MEME_Sso/meme.txt",  readsites = T, readsites.meta = T)[[3]]
+seqinr::write.fasta(sequences = as.list(meme$Site), names = as.vector(paste(1:nrow(meme))), "temp/motif.fasta", open = "w", as.string = TRUE)
+
+glam2<-read_meme("temp/GLAM2_Sso/glam2.meme")
+glam2rc<-motif_rc(glam2) #reverse complimentary to correct of glam2 motif output orientation
+write_transfac(glam2rc[[1]], "temp/GLAM2_Sso/transfacfile.txt", overwrite = T, append = FALSE)
+```
+
+
+```{bash Weblogo}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/bin
+weblogo --logo-font Menlo -A dna --errorbars NO -c classic -F eps -s large < temp/motif.fasta > temp/MEME_Sso/sequence_logo.eps
+
+weblogo --logo-font Menlo -A dna --errorbars NO -c classic -F eps -s large < temp/GLAM2_Sso/transfacfile.txt > temp/GLAM2_Sso/weblogo.glam2.motif1.eps
+```
+
+```{bash FIMO scanning genome}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/bin
+fimo -oc temp/FIMO temp/MEME/meme.html ../genome_data/SsoP2/NC_002754.fna
+```
+
+```{r FIMO data import}
+#read in fimo output tsv file
+fimo <- read.table("temp/FIMO/fimo.tsv", sep="\t", header=T)
+dim(fimo)
+#filter hits to CRISPR repeats
+#read in file
+crispr.coord <- read.table(crispr)
+#test if start of motif falls within any of the CRISPR arrays
+nonCRISPR.filt <-vector()
+for (i in 1:nrow(fimo)){
+  y <- vector()
+    for (j in 1:nrow(crispr.coord)){
+      z <- between(fimo$start[i], crispr.coord[j,2], crispr.coord[j,3])  
+      y[j] <- z
+    }
+  x <- sum(y)
+  nonCRISPR.filt[i] <- x
+}
+
+nonCRISPR.filt <- as.logical(nonCRISPR.filt)
+
+#filter the data set
+fimo.filt <- fimo[!nonCRISPR.filt,]
+
+
+#determine q-values of motifs around Cbp1 peaks
+meme.q <- vector()
+for (k in 1:nrow(meme)){
+  x <-  fimo.filt$matched_sequence == meme$Site[k]
+  y <- fimo.filt$q.value[x]
+  meme.q[k] <- y[1]
+}
+
+#find good matches that are not matching to CRISPR repeats
+fimo.filt[which(fimo.filt$q.value < quantile(meme.q, 0.9, na.rm=T) & !(fimo.filt$matched_sequence %in% meme$Site)), ]
+
+fimo.filt[which(fimo.filt$q.value < 0.05 & !(fimo.filt$matched_sequence %in% meme$Site)), ]
+
+#NOTE: The FIMO q-values for many of the site discovered in the original MEME search are not always great, sometimes because there is a better match to the consensus around but has been missed because of the summit annotation from the MACS2 peak caller being off shifting the sequence interval that is scanned in the MEME analysis.
+```
+
