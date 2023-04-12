@@ -1,0 +1,132 @@
+---
+title: "PeakCalling_SsoCbp1"
+author: "Fabian Blombach"
+date: "09/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#PLEASE NOTE: Due to space limitations, the alignment files are not available on github nor on NCBI. Raw Fastq data (and bigwig coverage tracks) are available at NCBI GEO under superseries GSE226026 (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE226026). Once the paired-end reads were aligned, and converted to bed file format using BEDtools bamtobed (https://bedtools.readthedocs.io/en/latest/content/tools/bamtobed.html), the alignments were sampled to match a normal distribution with the indicated mean and standard deviation as stated below (https://github.com/fblombach/ChIP-seq/blob/master/read_sampling.R). 
+cbp1_r1 <- "../../data_analysis/resampled_data/expon/r1/Cbp1_expon_r1.mean120.sd18.bed" #Cbp1 ChIP-seq replicate 1
+cbp1_r2 <- "../../data_analysis/resampled_data/expon/r2/Cbp1_expon_r2.mean120.sd18.bed" #Cbp1 ChIP-seq replicate 2
+inp_r1 <- "../../data_analysis/resampled_data/expon/r1/input.expon_r1.mean120.sd18.bed" #Chromatin input replicate 1
+inp_r2 <- "../../data_analysis/resampled_data/expon/r2/input.expon_r2.mean120.sd18.bed" #Chromatin input replicate 2
+
+#crispr arrays
+crispr_loci <- "../genome_data/SsoP2/crispr_loci.bed"
+
+require(idr)
+
+Sys.setenv(cbp1_r1 = cbp1_r1,
+          cbp1_r2 = cbp1_r2,
+          inp_r1 = inp_r1,
+          inp_r2 = inp_r2,
+          crispr_loci = crispr_loci)
+```
+
+
+```{bash}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/envs/dt/bin
+
+#calling peaks per replicate
+macs2 callpeak --outdir ../macs2_Sso/  -n macs2_SsoCbp1_r1 -f BEDPE -g 2992245 -q 0.01 --keep-dup auto --call-summits  -t $cbp1_r1    -c $inp_r1
+
+
+macs2 callpeak --outdir ../macs2_Sso/  -n macs2_SsoCbp1_r2 -f BEDPE -g 2992245 -q 0.01 --keep-dup auto --call-summits  -t $cbp1_r2    -c $inp_r2
+
+
+#removing summits within CRISPR arrays
+bedtools intersect -v -a ../macs2_Sso/macs2_SsoCbp1_r1_summits.bed -b $crispr_loci > ../macs2_Sso/macs2_SsoCbp1_r1_summits.filt.bed
+
+bedtools intersect -v -a ../macs2_Sso/macs2_SsoCbp1_r2_summits.bed -b $crispr_loci > ../macs2_Sso/macs2_SsoCbp1_r2_summits.filt.bed
+
+#matching peaks for the two replciates based on summits positions
+bedtools window -w 40 -a ../macs2_Sso/macs2_SsoCbp1_r1_summits.filt.bed -b ../macs2_Sso/macs2_SsoCbp1_r2_summits.filt.bed > ../macs2_Sso/matchedPeaks.SsoCbp1.w40.bed
+```
+
+
+#importing peak files
+```{r}
+#file with peaks matched between replicates
+matchedPeaks <- read.table("../macs2_Sso/matchedPeaks.SsoCbp1.w40.bed")
+
+#narrowPeak files with enrichment for peaks in each replicate
+narrow.r1 <- read.table("../macs2_Sso/macs2_SsoCbp1_r1_peaks.narrowPeak")
+narrow.r2 <- read.table("../macs2_Sso/macs2_SsoCbp1_r2_peaks.narrowPeak")
+
+#adding enrichment values (7th column) to matched peak file and calculate the mean
+matchedPeaks <- merge(matchedPeaks, narrow.r1[,c(4,7)], by.x="V4", by.y="V4")
+matchedPeaks <- merge(matchedPeaks, narrow.r2[,c(4,7)], by.x="V9", by.y="V4")
+matchedPeaks$V13 <- rowMeans(matchedPeaks[,11:12])
+
+#changing back column order
+matchedPeaks <- matchedPeaks[, c(3:5, 2, 6:9, 1, 10:13)]
+```
+
+
+#Applying IDR
+```{r data import and filtering}
+
+x <- cbind(matchedPeaks$V5, matchedPeaks$V10)
+# IDR requires some starting values for the estimation of the IDR: 
+# mean value mu for the reproducible component (not sure yet what this value really means, to small to refer to the –log10 pvalue scores!)
+mu <- 2.07
+# standard deviation sigma for the reproducible component
+sigma <- 1.34 
+# correlation coefficient rho of the reproducible component 
+rho <- 0.8 
+# proportion p of the reproducible component (i.e. fraction of peaks with reproducible ranking, i.e. calculated global IDR < 0.01) 
+p <- 0.7
+
+# estimate IDR
+idr.out <- est.IDR(x, mu, sigma, rho, p, eps=0.001, max.ite=100) 
+
+# eps defines stopping criterion based on log likelihood increment 
+# max.ite defines the number of maximum iterations
+
+#idr.out is an object that includes:
+# $para	the final estimated values (compare for different max.ite!)
+# $idr	the calculated “local IDR” for each peak
+# $IDR	the “global IDR”, i.e. the combined IDR for  
+
+# check estimated parameters
+idr.out$para
+# visualise data with correspondence profiles
+rank1 <- rank(matchedPeaks$V5)
+rank2 <- rank(matchedPeaks$V10)
+l <- 1/length(rank1)
+gc <- get.correspondence (rank1, rank2, seq(0.01,0.99, by=l))
+plot(gc$psi$t, gc$psi$value, xlab="t", ylab="psi", xlim=c(0,max(gc$psi$t)), ylim = c(0, max(gc$psi$value)), cex.lab=2)
+lines(gc$psi$smoothed.line, lwd=4)
+abline(coef=c(0,1), lty=3)
+# and the derrivative psi'
+plot(gc$dpsi$t, gc$dpsi$value, xlab="t", ylab="psi'", xlim=c(0, max(gc$dpsi$t)),
+     ylim=c(0, max(gc$dpsi$value)), cex.lab=2)
+lines(gc$dpsi$smoothed.line, lwd=4)
+abline(h=1, lty=3)
+```
+```{r filtering by global IDR}
+
+#filter peaks by global IDR
+filteredPeaks2 <- matchedPeaks[idr.out$IDR < 0.01,]
+
+#calculating mean summit positions and renumbering peaks
+filteredPeaks2$start <- ceiling(rowMeans(filteredPeaks2[,c(2,7)]))
+filteredPeaks2$end <- filteredPeaks2$start + 1
+filteredPeaks2$peak <- paste0("cbp1_peak", 1:nrow(filteredPeaks2))
+colnames(filteredPeaks2) <- c("nucleotide", "start.r1", "start.r1", "peak.r1", "scoare.r1",
+                              "nucleotide", "start.r2", "start.r2", "peak.r2", "scoare.r2",
+                              "enrichment.replicate1", "enrichment.replicate2", "enrichment.average", "start", "end", "peak") #column names for Supplemental File 1
+
+#writing data set with global IDR < 0.01
+write.table(filteredPeaks2[,c(1,14:16,13)], "../data/SsoCbp1_pooled_IDRfilteredPeaks_summits.bed", col.names = F, row.names = F, sep="\t", quote = FALSE)
+
+#subset with minimum 5-fold enrichment in peaks (average between two replicates)
+write.table(filteredPeaks2[filteredPeaks2$enrichment.average > 5,c(1,14:16,13)], "../data/SsoCbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bed", quote=F, col.names=F, row.names=F, sep="\t")
+
+#write subset with minimum 5-fold enrichment in peaks as Supplemental File 1
+write.table(filteredPeaks2[filteredPeaks2$enrichment.average > 5,c(1,14:16,13,11,12)], "../data/SupplementalFile1.S.solfataricusP2.Cbp1_peaks.txt", quote=F, col.names=T, row.names=F, sep="\t")
+```
+

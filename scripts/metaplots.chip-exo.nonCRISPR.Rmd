@@ -1,0 +1,136 @@
+---
+title: "DNAheatmap_chip-exo"
+author: "Fabian Blombach"
+date: "26/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+require(rtracklayer)
+require(ggplot2)
+require(cowplot)
+
+#coordinates and strandness of nonCRISPR binding sites based on MEME motif
+nonCRISPR<-read.table("../data/MEME_motif_coordinates/motifStart_coordinates_SsoP2.bed")
+
+#Cbp1 ChIP-exo data
+fw <- "../data/ChIP-exo_S.solfataricus//Cbp1_sso_gm.plus.bw"
+rv <- "../data/ChIP-exo_S.solfataricus/Cbp1_sso_gm.minus.bw"
+
+#CreN7 ChIP-exo data
+fw.c7 <- "../data/ChIP-exo_S.solfataricus/CreN7_sso_gm.plus.bw"
+rv.c7 <- "../data/ChIP-exo_S.solfataricus/CreN7_sso_gm.minus.bw"
+
+
+Sys.setenv(fw = fw, rv = rv, fw.c7 = fw.c7, rv.c7 = rv.c7)
+```
+
+```{r coordinates}
+#same window as for CRISPR repeats. Position 1 in 21 nt nonCRISPR motif corresponds to position 5 in CRISPR AB repeats
+coord_plus <- IRangesList("gi|15896971|ref|NC_002754.1|" = IRanges(nonCRISPR$V3[nonCRISPR$V6 == "+"] -24, width=65))
+coord_minus <- IRangesList("gi|15896971|ref|NC_002754.1|" = IRanges(nonCRISPR$V3[nonCRISPR$V6 == "-"] -40, width=65))
+```
+
+```{r data import}
+A.data.fw <- import.bw(fw, selection = coord_plus, as="NumericList")
+B.data.fw <- import.bw(rv, selection = coord_minus, as="NumericList")
+A.data.rv <- import.bw(rv, selection = coord_plus, as="NumericList")
+B.data.rv <- import.bw(fw, selection = coord_minus, as="NumericList")
+
+
+A.data.c7.fw <- import.bw(fw.c7, selection = coord_plus, as="NumericList")
+B.data.c7.fw <- import.bw(rv.c7, selection = coord_minus, as="NumericList")
+A.data.c7.rv <- import.bw(rv.c7, selection = coord_plus, as="NumericList")
+B.data.c7.rv <- import.bw(fw.c7, selection = coord_minus, as="NumericList")
+```
+
+```{r into data.frame}
+A.dataf.fw <- data.frame(do.call(rbind, A.data.fw@listData))
+A.dataf.rv <- data.frame(do.call(rbind, A.data.rv@listData))
+A.dataf.fw.c7 <- data.frame(do.call(rbind, A.data.c7.fw@listData))
+A.dataf.rv.c7 <- data.frame(do.call(rbind, A.data.c7.rv@listData))
+
+B.dataf.fw <- data.frame(do.call(rbind, B.data.fw@listData))
+B.dataf.rv <- data.frame(do.call(rbind, B.data.rv@listData))
+B.dataf.fw.c7 <- data.frame(do.call(rbind, B.data.c7.fw@listData))
+B.dataf.rv.c7 <- data.frame(do.call(rbind, B.data.c7.rv@listData))
+
+
+colnames(A.dataf.fw)<- 1:65
+colnames(A.dataf.rv)<- 1:65
+colnames(A.dataf.fw.c7)<- 1:65
+colnames(A.dataf.rv.c7)<- 1:65
+
+colnames(B.dataf.fw)<- 65:1
+colnames(B.dataf.rv)<- 65:1
+colnames(B.dataf.fw.c7)<- 65:1
+colnames(B.dataf.rv.c7)<- 65:1
+
+```
+
+```{r combining the two strands}
+data.fw<-rbind(A.dataf.fw, B.dataf.fw)
+data.rv<-rbind(A.dataf.rv, B.dataf.rv)
+
+data.fw.c7<-rbind(A.dataf.fw.c7, B.dataf.fw.c7)
+data.rv.c7<-rbind(A.dataf.rv.c7, B.dataf.rv.c7)
+```
+
+
+
+```{r calculating mean}
+
+mean.fw <- apply(data.fw, 2, mean)
+mean.rv <- apply(data.rv, 2, mean)
+
+mean.fw.c7 <- apply(data.fw.c7, 2, mean)
+mean.rv.c7 <- apply(data.rv.c7, 2, mean)
+
+comb.data<-data.frame(fw.cbp1=mean.fw, rv.cbp1=mean.rv, fw.cren7=mean.fw.c7, rv.cren7=mean.rv.c7)
+```
+
+```{r plotting}
+theme_chip<- function (base_size = 11, base_family = "") 
+{
+  theme_bw(base_size = base_size, base_family = base_family) %+replace% 
+    theme(panel.background = element_blank(), 
+          panel.border = element_blank(), 
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), 
+          axis.title.x=element_blank(), 
+          axis.text.x=element_blank(), 
+          axis.ticks.x=element_blank(),
+          axis.title.y=element_blank(), 
+          plot.margin = unit(c(1,1,0,1), "mm"), complete = TRUE)
+}
+
+
+g <- ggplot(data=comb.data) + 
+ geom_area(aes(x=1:65, y=fw.cbp1),  fill="#0000ffff", alpha=0.5) + 
+  geom_line(aes(x=1:65, y=fw.cbp1),  colour="#0000ffff") +
+  geom_area(aes(x=1:65, y= -rv.cbp1),  fill="#000092ff", alpha=0.5) + 
+  geom_line(aes(x=1:65, y= -rv.cbp1),  colour="#000092ff") +
+  theme_chip()  +
+  theme(axis.line.x = element_blank(), axis.line.y = element_line(color="black", size = 0.5)) +
+  scale_y_continuous(breaks = c(-80,80), limits = c(-80, 80), expand = c(0, 0), position="right") +
+  scale_x_continuous(expand = c(0, 0), limits = c(1,65))
+g
+
+g7 <- ggplot(data=comb.data) + 
+  geom_area(aes(x=1:65, y=fw.cren7),  fill="#0000ffff", alpha=0.5) + 
+  geom_line(aes(x=1:65, y=fw.cren7),  colour="#0000ffff") +
+  geom_area(aes(x=1:65, y= -rv.cren7),  fill="#000092ff", alpha=0.5) + 
+  geom_line(aes(x=1:65, y= -rv.cren7),  colour="#000092ff") +
+  theme_chip()  +
+  theme(axis.line.x = element_blank(), axis.line.y = element_line(color="black", size = 0.5)) +
+  scale_y_continuous(breaks = c(-20,20), limits = c(-20, 20), expand = c(0, 0), position="right") +
+  scale_x_continuous(expand = c(0, 0), limits = c(1,65))
+g7
+
+p <- plot_grid(g, g7, ncol = 1, align="v")
+p
+save_plot("../plots/chip-exo.aggregate.nonCRISPR.pdf", p, base_width=3, base_height=4)
+```
+
