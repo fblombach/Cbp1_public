@@ -1,0 +1,115 @@
+---
+title: "Comparing Cbp1 and Cren7 occupancy genome-wide"
+author: "Fabian Blombach"
+date: "01/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#coordinates of CRISPR loci
+crispr_loci <- "../genome_data/SsoP2/crispr_loci.bed"
+
+#summit position of non-CRISPR Cbp1 binding sites
+nonCRISPR <- "../data/SsoCbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bed"
+
+#ChIP-seq occupancy files (input normalised)
+cbp1_r1 <- "../data/ChIP-seq_S.solfataricus/Cbp1_expon_r1.normRatio.bw"
+cbp1_r2 <- "../data/ChIP-seq_S.solfataricus/Cbp1_expon_r2.normRatio.bw"
+cren7_r1 <- "../data/ChIP-seq_S.solfataricus/Cren7_SsoP2.r1.normRatio.bw"
+cren7_r2 <- "../data/ChIP-seq_S.solfataricus/Cren7_SsoP2.r2.normRatio.bw"
+
+Sys.setenv(cbp1_r1 = cbp1_r1,
+          cbp1_r2 = cbp1_r2,
+          cren7_r1 = cren7_r1,
+          cren7_r2 = cren7_r2,
+          crispr_loci = crispr_loci,
+          nonCRISPR = nonCRISPR)
+
+require(ggplot2)
+```
+
+Calculate Cbp1 and Cren7 occupancy for bins of 30 bp
+```{bash}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/envs/dt/bin
+if [ -d temp ]; then rm -Rf temp; fi
+mkdir temp
+
+multiBigWigSummary bins -bs 30 -p max/2 -b $cbp1_r1 $cbp1_r2 $cren7_r1 $cren7_r2 -o temp/deleteme.npz --outRawCounts temp/rawCounts.tab --labels "Cbp1_r1" "Cbp1_r2" "Cren7_r1" "Cren7_r2"
+```
+
+Read data and write bin coordinates into bed file
+```{r}
+data <- read.table("temp/rawCounts.tab")
+
+write.table(data[,1:3], "temp/binCoordinates.bed", quote=F, sep="\t", col.names=F, row.names=F)
+```
+
+
+
+Calculate overlap with CRISPR loci
+```{bash}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/bin
+
+bedtools window -w 30 -a $nonCRISPR -b temp/binCoordinates.bed > temp/nonCRISPRoverlap.bed
+
+bedtools window -w 30 -a $crispr_loci -b temp/binCoordinates.bed > temp/crispr_loci_overlap.bed
+```
+
+
+```{r averaging and assinging occupancy data}
+#calculating log-transfromed geometric mean
+data$cbp1_gm<-rowMeans(log(data[,4:5], 2))
+data$cren7_gm<-rowMeans(log(data[,6:7], 2))
+
+#remove rows not covered
+data<-data[!is.na(data$cren7_gm) & !is.na(data$cbp1_gm),]
+
+
+# function to calculate density
+get_density <- function(a, b, n = 500) {
+  dens <- MASS::kde2d(x = a, y = b, n = n)
+  ix <- findInterval(a, dens$x)
+  iy <- findInterval(b, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+
+data$density <- get_density(data$cren7_gm, data$cbp1_gm)
+
+
+#read in files with overlapping bins and merge with coverage data
+crisprOverlap <- read.table("temp/crispr_loci_overlap.bed")
+noncrisprOverlap <- read.table("temp/nonCRISPRoverlap.bed")
+crisprOccup<-merge(data[,c(2,8,9)], crisprOverlap[,c(4,9)], by.x="V2", by.y="V9")
+noncrisprOccup<-merge(data[,c(2,8,9)], noncrisprOverlap[,c(4,8)], by.x="V2", by.y="V8")
+
+#create new vector for type of CRISPR loci
+x <- factor(c(), levels = c("AB", "CD", "EF"))
+for(i in 1:nrow(crisprOccup)){
+    y<-if(crisprOccup$V4[i] %in% c("locus_A", "locus_B")){"AB"} else{if(crisprOccup$V4[i] %in% c("locus_C", "locus_D")){"CD"} else {"EF"}}
+  x[i]<-y
+}
+crisprOccup$type <- x
+```
+
+```{r plotting}
+g <- ggplot(data=data, aes(x=cren7_gm,y=cbp1_gm, color=density))
+g <- g + geom_point(cex=0.6, alpha=1) + scale_color_gradient(low="#fafafe", high="#1B1464")
+g <- g + geom_point(data=noncrisprOccup, aes(x=cren7_gm,y=cbp1_gm), colour="#1289A7", cex=0.6, alpha=0.4)
+g <- g + geom_point(data=crisprOccup[crisprOccup$type == "AB",], aes(x=cren7_gm,y=cbp1_gm), colour="#EA2027", cex=0.6, alpha=0.25)
+g <- g + geom_point(data=crisprOccup[crisprOccup$type == "CD",], aes(x=cren7_gm,y=cbp1_gm), colour="#fe6f24", cex=0.6, alpha=0.25)
+g <- g + geom_point(data=crisprOccup[crisprOccup$type == "EF",], aes(x=cren7_gm,y=cbp1_gm), colour="#FFC312", cex=0.6, alpha=0.25)
+g <- g + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank()) +
+  scale_x_continuous(limits=c(-2.5,6.5), breaks=seq(-1, 11,by=2), expand = c(0, 0)) +
+  scale_y_continuous(limits=c(-2.5,10.5), breaks=seq(-1, 110, by=2), expand = c(0, 0)) +
+  xlab("Cren7 occupancy log2(IP/input)") +
+  ylab("Cbp1 occupancy log2(IP/input)")
+g
+ggplot2::ggsave("../plots/Cbp1_Cren7_occupancy.png", plot = g, device = "png", path = NULL,
+       scale = 1, width = 80, height = 80, units = c("mm"), limitsize = TRUE)
+```
+
+
