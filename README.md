@@ -31,6 +31,7 @@ MACS2 peak calling for Cbp1 ChIP-seq data is documented here:<br />
 
 # Genome-wide comparison of Cbp1 and Cren7 ChIP-seq occupancy in *S. solfataricus* P2
 [R markdown](https://github.com/fblombach/Cbp1_public/blob/main/scripts/Cbp1_Cren7_occupancy.Rmd)
+and [html output](https://github.com/fblombach/Cbp1_public/blob/main/scripts/Cbp1_Cren7_occupancy.html)
 
 # Identification of a CRISPR repeat-like binding motif in non-canonical Cbp1 binding sites
 [*S. solfataricus* P2](https://github.com/fblombach/Cbp1_public/blob/main/scripts/nonCRISPR_peaks.Sso.Rmd)<br />
