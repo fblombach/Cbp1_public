@@ -36,13 +36,13 @@ data.WT.m$SD <- data.WT.sd$SD
 
 #plot
 gb <- ggplot() + geom_quasirandom(data=data.WT[data.WT$Conc == 20,], aes(x=Template, y=Fraction.Bound), 
-                            colour="darkgrey", alpha = 0.4) 
+                            colour="#333333", alpha = 0.4) 
 
-gb <- gb + geom_errorbar(data=data.WT.m, aes(x=Template, ymin=Mean-SD, ymax= Mean+SD), width=0.1, col="darkgrey")
+gb <- gb + geom_errorbar(data=data.WT.m, aes(x=Template, ymin=Mean-SD, ymax= Mean+SD), width=0.1, col="#333333")
 
 
 gb <- gb + geom_point(data=data.WT.m, aes(x=Template, y=Mean, fill=Template), 
-                      shape=21, size=3, col="darkgrey", alpha=0.8)
+                      shape=21, size=3, col="#333333", alpha=0.8)
 
 gb <- gb + scale_fill_viridis_d(option="plasma")
 gb <- gb + theme_bw() 
@@ -67,12 +67,12 @@ data.dHTH1.m$SD <- data.dHTH1.sd$SD
 
 #bargraph dHTH1
 gb.1 <- ggplot() + geom_quasirandom(data=data.dHTH1[data.dHTH1$Conc == 160,], aes(x=Template, y=Fraction.Bound), 
-                                  colour="darkgrey", alpha = 0.4) 
-gb.1 <- gb.1 + geom_errorbar(data=data.dHTH1.m, aes(x=Template, ymin=ifelse(Mean-SD>0, Mean-SD, 0), ymax= Mean+SD), width=0.1, col="darkgrey")
+                                  colour="#333333", alpha = 0.4) 
+gb.1 <- gb.1 + geom_errorbar(data=data.dHTH1.m, aes(x=Template, ymin=ifelse(Mean-SD>0, Mean-SD, 0), ymax= Mean+SD), width=0.1, col="#333333")
 
 
 gb.1 <- gb.1 + geom_point(data=data.dHTH1.m, aes(x=Template, y=Mean, fill=Template), 
-                          shape=21, size=3, col="darkgrey", alpha=0.8)
+                          shape=21, size=3, col="#333333", alpha=0.8)
 gb.1 <- gb.1 + scale_fill_viridis_d(option="plasma")
 gb.1 <- gb.1 + theme_bw() 
 gb.1 <- gb.1 + ylab("Fraction Bound") + ggtitle("dHTH1") + scale_y_continuous(limits =c(0,1), expand = c(0,0), position = "right")
@@ -98,12 +98,12 @@ data.dHTH3.m$SD <- data.dHTH3.sd$SD
 
 #graph dHTH3
 gb.3 <- ggplot() + geom_quasirandom(data=data.dHTH3[data.dHTH3$Conc == 80,], aes(x=Template, y=Fraction.Bound), 
-                                    colour="darkgrey", alpha = 0.4) 
-gb.3 <- gb.3 + geom_errorbar(data=data.dHTH3.m, aes(x=Template, ymin=Mean-SD, ymax= Mean+SD), width=0.1, col="darkgrey")
+                                    colour="#333333", alpha = 0.4) 
+gb.3 <- gb.3 + geom_errorbar(data=data.dHTH3.m, aes(x=Template, ymin=Mean-SD, ymax= Mean+SD), width=0.1, col="#333333")
 
 
 gb.3 <- gb.3 + geom_point(data=data.dHTH3.m, aes(x=Template, y=Mean, fill=Template), 
-                          shape=21, size=3, col="darkgrey", alpha=0.8)
+                          shape=21, size=3, col="#333333", alpha=0.8)
 gb.3 <- gb.3 + scale_fill_viridis_d(option="plasma")
 gb.3 <- gb.3 + theme_bw() 
 gb.3 <- gb.3 + ylab("Fraction Bound") + ggtitle("dHTH3") + scale_y_continuous(limits =c(0,1), expand = c(0,0), position = "right")
