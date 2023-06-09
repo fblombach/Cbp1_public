@@ -141,16 +141,34 @@ data.an$prot <- factor(data.an$prot, levels=c("WT", "dHTH1","dHTH3")) #change or
 levels(data.an$Template)
 
 
-#Dunnett test for to test which templates are differently bound for WT
+#Dunnett test for to test which templates are differently bound for WT, non-parametric version
 dunnett.output.WT <- PMCMRplus::dunnettTest(x = data.an$Frac[data.an$prot == "WT"],
-                            g = data.an$Template[data.an$prot == "WT"],
-                            alternative="less")
+                            g = data.an$Template[data.an$prot == "WT"])
 dunnett.output.WT
   
+#beta regression with Likelihood ratio test pairwise WT DNA template vs mutations
+lrtest.beta.t <- data.frame(Template.mutation = vector(), p.val = vector()) #data frame to collect p values for each combination
 
-#beta regression with Likelihood ratio test for individual interaction terms
+  for(i in 2:length(levels(data.an$Template))){
+    d <- data.an[data.an$prot == "WT" & data.an$Template %in% levels(data.an$Template)[c(1,i)],]
+    w <-betareg(data = d, 
+                Fraction.Bound ~ 1, link="log") #empty
+    x <-betareg(data = d, 
+                Fraction.Bound ~ Template, link="log")
+    y <- lrtest(w,x) #extract the p-value for the interaction term
+    z <- c(levels(data.an$Template)[i], y$`Pr(>Chisq)`[2])
+    
+    lrtest.beta.t[i-1,] <- z
+  }
 
-lrtest.beta <- data.frame(Protein.variant = vector(), Template.mutation = vector(), p.val.interaction = vector()) #data frame to collect p values for each combination
+lrtest.beta.t$p.adj <- p.adjust(lrtest.beta.t$p.val, method= "bonferroni") #Bonferroni multiple testing correction
+lrtest.beta.t
+
+
+
+#beta regression with Likelihood ratio test for individual interaction terms to test how effects of DNA mutations depend on HTH domains of Cbp1
+
+lrtest.beta.int <- data.frame(Protein.variant = vector(), Template.mutation = vector(), p.val.interaction = vector()) #data frame to collect p values for each combination
 
 for(j in 2:3){
   for(i in 2:length(levels(data.an$Template))){
@@ -162,8 +180,8 @@ for(j in 2:3){
     y <- lrtest(w,x) #extact the p-value for the interaction term
     z <- c(levels(data.an$prot)[j], levels(data.an$Template)[i], y$`Pr(>Chisq)`[2])
     
-    lrtest.beta[(j-2)*5 + i-1,] <- z
+    lrtest.beta.int[(j-2)*5 + i-1,] <- z
   }
 }
-lrtest.beta$p.adj <- p.adjust(lrtest.beta$p.val.interaction, method= "bonferroni") #Bonferroni multiple testing correction
-lrtest.beta
+lrtest.beta.int$p.adj <- p.adjust(lrtest.beta.int$p.val.interaction, method= "bonferroni") #Bonferroni multiple testing correction
+lrtest.beta.int
