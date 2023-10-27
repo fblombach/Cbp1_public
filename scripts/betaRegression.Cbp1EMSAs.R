@@ -104,7 +104,7 @@ gb.3 <- gb.3 + geom_errorbar(data=data.dHTH3.m, aes(x=Template, ymin=Mean-SD, ym
 
 gb.3 <- gb.3 + geom_point(data=data.dHTH3.m, aes(x=Template, y=Mean, fill=Template), 
                           shape=21, size=3, col="#333333", alpha=0.8)
-gb.3 <- gb.3 + scale_fill_viridis_d(option="plasma")
+gb.3 <- gb.3 + scale_colour_viridis_d(option="plasma")
 gb.3 <- gb.3 + theme_bw() 
 gb.3 <- gb.3 + ylab("Fraction Bound") + ggtitle("dHTH3") + scale_y_continuous(limits =c(0,1), expand = c(0,0), position = "right")
 gb.3 <- gb.3 + theme(axis.text.x=element_text(angle=45, hjust=1, vjust=1),

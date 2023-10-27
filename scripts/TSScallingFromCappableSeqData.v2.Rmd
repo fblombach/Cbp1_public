@@ -18,8 +18,12 @@ ko.r1.rv <- "../data/Cappable-seq_S.islandicus/cbp1_r1.5primeCov.minus.bw"
 ko.r2.fw <- "../data/Cappable-seq_S.islandicus/cbp1_r2.5primeCov.plus.bw"
 ko.r2.rv <- "../data/Cappable-seq_S.islandicus/cbp1_r2.5primeCov.minus.bw"
 
-#CRISPR loci
-crispr_loci <- read.table("../genome_data/SislREY15A/crispr_loci.SislREY15A.bed")
+#CID coordinates
+cid <- read.table("../genome_data/SislREY15A/CIDs.bed")
+#correction for shift of CID border by 817 bp  to match first AluI restriction site
+
+#CRISPR array coordinates
+crispr <- read.table("../genome_data/SislREY15A/crispr_loci.SislREY15A.bed")
 
 #CRISPR leader TSS positions based on manual data inspection of cappable-seq data
 crispr_leader <- data.frame(V1=rep("NC_017276.1",2), V2=c(732605,736615), V3=c(732615,736625), V4=c("locus_id2", "locus_id3"), V5=rep(0,2), V6=c("-","+"))  
@@ -31,13 +35,18 @@ nonCRISPR <- read.table("../data/SislCbp1_pooled_IDRfilteredPeaks_summits.min5En
 
 #S. islandicus REY15A genome annotation
 sisl.genome <- read.delim("../genome_data/SislREY15A/GCF_000189555.1_ASM18955v1_genomic.gff", skip=7, header=F)
+sisl.genome <- sisl.genome[-c(1, nrow(sisl.genome)),] #remove first and last rows of gff file without gene information
 
+#operon predition by Operon-mapper (Taboada et al. 2018, Bioinformatics)
+operons <- read.csv("../genome_data/SislREY15A/Operon-mapper.output.csv", header=T)
 
 require(rtracklayer)
 require(DESeq2)
 require(ggplot2)
 require(RVAideMemoire)
 require(LSD)
+require(circlize)
+require(dplyr)
 ```
 
 
@@ -213,22 +222,23 @@ ggplot2::ggsave("../plots/TSS.deseq.png", plot = g, device = "png", path = NULL,
 
 
 ```{r Fisher test categories}
+sl <- 0.01
 #checking fraction of each category with significant changes
-summary(deseq.results$padj < 0.01)
-summary(deseq.results$padj[!crispr.filt & !nonCRISPR.filt] < 0.01)
-summary(deseq.results$padj[nonCRISPR.filt] < 0.01)
-summary(deseq.results$padj[crispr.filt] < 0.01)
+summary(deseq.results$padj < sl)
+summary(deseq.results$padj[!crispr.filt & !nonCRISPR.filt] < sl)
+summary(deseq.results$padj[nonCRISPR.filt] < sl)
+summary(deseq.results$padj[crispr.filt] < sl)
 
 # fraction of genes called to be differentially regulated (padj < 0.01)
-as.numeric(summary(deseq.results$padj < 0.01)[3])/length(deseq.results$padj)
+as.numeric(summary(deseq.results$padj < sl)[3])/length(deseq.results$padj)
 
 #Fisher's exact test for enrichment of upregulated TSS RNAs upon cbp1 deletion
-up.m<-matrix(c(sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange < 0] < 0.01),
-                     sum(crispr.filt) - sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange < 0] < 0.01),
-                     sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange < 0] < 0.01),
-                     sum(nonCRISPR.filt) - sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange < 0] < 0.01),
-                     sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange < 0] < 0.01),
-                     sum(!crispr.filt & !nonCRISPR.filt) - sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange < 0] < 0.01)),
+up.m<-matrix(c(sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange < 0] < sl),
+                     sum(crispr.filt) - sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange < 0] < sl),
+                     sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange < 0] < sl),
+                     sum(nonCRISPR.filt) - sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange < 0] < sl),
+                     sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange < 0] < sl),
+                     sum(!crispr.filt & !nonCRISPR.filt) - sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange < 0] <  sl)),
                      nrow=2)
 up.m
 p.CRISPR.up<-fisher.test(up.m[,c(1,3)])$p.value
@@ -236,12 +246,12 @@ p.nonCRISPR.up<-fisher.test(up.m[,c(2,3)])$p.value
 
 
 #Fisher's exact test for enrichment of downregulated TSS RNAs upon cbp1 deletion
-down.m <- matrix(c(sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange > 0] < 0.01),
-                     sum(crispr.filt) - sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange > 0] < 0.01),
+down.m <- matrix(c(sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange > 0] < sl),
+                     sum(crispr.filt) - sum(deseq.results$padj[crispr.filt & deseq.results$log2FoldChange > 0] <sl),
                      sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange > 0] < 0.01),
-                     sum(nonCRISPR.filt) - sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange > 0] < 0.01),
-                     sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange > 0] < 0.01),
-                     sum(!crispr.filt & !nonCRISPR.filt) - sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange > 0] < 0.01)),
+                     sum(nonCRISPR.filt) - sum(deseq.results$padj[nonCRISPR.filt & deseq.results$log2FoldChange > 0] < sl),
+                     sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange > 0] < sl),
+                     sum(!crispr.filt & !nonCRISPR.filt) - sum(deseq.results$padj[!crispr.filt & !nonCRISPR.filt & deseq.results$log2FoldChange > 0] < sl)),
                      nrow=2)
 down.m
 p.CRISPR.down<-fisher.test(down.m[,c(1,3)])$p.value
@@ -253,20 +263,22 @@ p.adjust(p.vec, method="bonferroni")
 ```
 
 ```{r identify TSSs regulated by Cbp1}
-deseq.results.df[nonCRISPR.filt,][deseq.results.df[nonCRISPR.filt,]$padj < 0.01,]
-TSS.called.final[nonCRISPR.filt,][deseq.results.df[nonCRISPR.filt,]$padj < 0.01,]
+sl <- 0.01
+deseq.results.df[nonCRISPR.filt,][deseq.results.df[nonCRISPR.filt,]$padj < sl,]
+TSS.called.final[nonCRISPR.filt,][deseq.results.df[nonCRISPR.filt,]$padj < sl,]
 
 #exporting those TSSs upregulated in cbp1 deletion strain
-ex <- TSS.called.final[nonCRISPR.filt,][deseq.results.df[nonCRISPR.filt,]$padj < 0.01 & deseq.results.df[nonCRISPR.filt,]$log2FoldChange < 0,]
+ex <- TSS.called.final[nonCRISPR.filt,][deseq.results.df[nonCRISPR.filt,]$padj < sl & deseq.results.df[nonCRISPR.filt,]$log2FoldChange < 0,]
 data.bed <- data.frame(rep(sisl.genome[1,1], times=nrow(ex)), ex$genomePos-1, ex$genomePos, rep("TSS", times=nrow(ex)), rep("*", times=nrow(ex)), ex$strand)
-write.table(data.bed, "temp/TSSs.Cbp1Associated.upregulatedInCbp1DeletionStrain.bed", quote=F, row.names=F, col.names=F, sep = "\t")
+write.table(data.bed, "../data/Cappable-seq_S.islandicus/TSSs.Cbp1Associated.upregulatedInCbp1DeletionStrain.bed", quote=F, row.names=F, col.names=F, sep = "\t")
 ```
 
 
 
 ```{r identify TSSs regulated by Cbp1 in CRISPR arrays}
-deseq.results.df[crispr.filt,][deseq.results.df[crispr.filt,]$padj < 0.01,]
-TSS.called.final[crispr.filt,][deseq.results.df[crispr.filt,]$padj < 0.01,]
+
+deseq.results.df[crispr.filt,][deseq.results.df[crispr.filt,]$padj < sl,]
+TSS.called.final[crispr.filt,][deseq.results.df[crispr.filt,]$padj < sl,]
 
 ```
 
@@ -276,7 +288,7 @@ df <-data.frame(abs=c(up.m[1,], down.m[1,]), frac=c(up.m[1,]/colSums(up.m),down.
 g1 <- ggplot(data=df, aes(x=dir, y=frac, group=type)) + geom_col(aes(fill=type), position="dodge")
 g1 <- g1 + geom_text(aes(label=abs), position=position_dodge(0.9), vjust=-0.5) #add absolute counts for each group as label
 g1 <- g1 + scale_y_continuous("fraction", limits=c(0,1), expand=c(0,0)) + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank())
-g1 <- g1 + scale_fill_manual(values=c("#FFC312", "#1289A7", "#1B1464")) + xlab("Relative abundance of TSS RNAs in deltaCbp1")
+g1 <- g1 + scale_fill_manual(values=c("#afdde9", "#2c89a0", "#164450")) + xlab("Relative abundance of TSS RNAs in deltaCbp1")
 g1
 
 ggsave("../plots/TSS.deseq.bargraph.pdf", plot = g1, path = NULL,
@@ -294,6 +306,189 @@ for(i in 2:4){
 }
 
 
+
+
 ```
+
+```{r circos plot}
+#make data frame for circos plot
+sl <- 0.01
+
+dbed<-data.frame(chr=rep("NC_017276.1", times=nrow(deseq.results)), start= TSS.called.final$genomePos -1, end= TSS.called.final$genomePos)
+dbed$logFC = - deseq.results$log2FoldChange
+dbed$padj <- deseq.results$padj < sl
+
+#circos plot
+pdf(file=paste0("../plots/circos.cappables-seq.padj", sl,".pdf"), width=4, height=4)  
+circos.clear()
+  circos.par("track.height" = 0.6, start.degree = 90, gap.degree = 0, cell.padding = c(0.0, 0,0.0, 0))
+  circos.initializeCircularGenome(name="NC_017276.1", genome_size=2522992, major.by=200000)
+  draw.sector(338.9, 348, rou1 = 1, rou2 = 0.1, clock.wise = F, col = "#ff000010", border=F) 
+#Track showing genomic positions of CIDs
+  circos.genomicTrack(data=cid, ylim=c(0,1), track.height=0.04, panel.fun = function(region, value, ...) {
+      circos.genomicRect(region, value, ybottom = 0, col = "lightgrey", border = "white")
+          }, bg.border = NA)
+#Track showing genomic positions of CRISPR arrays 
+ circos.genomicTrack(data=crispr, ylim=c(0,1), track.height=0.04, panel.fun = function(region, value, ...) {
+    circos.genomicRect(region, value, ybottom = 0, col = "#afdde9ff", border = "#afdde9ff")
+        }, bg.border = NA)
+#Track showing log2FC of genes with color based on padj  
+  circos.genomicTrack(data=dbed, numeric.column=4, track.height=0.64, panel.fun = function(region, value, ...) {
+      circos.genomicPoints(region, value, pch=16, cex=0.4,
+              col = ifelse(value[[2]] == T & value[[1]] > 0, add_transparency("cyan4", transparency=0.4),
+                                  ifelse(value[[2]] == T & value[[1]] < 0, add_transparency("red", transparency=0.4),
+                                        add_transparency("grey", transparency = 0.6))), ...)
+             }, bg.border = NA)
+       circos.segments(x0=0, y0=0, x1=2522992, y1=0)
+  circos.yaxis("right", labels.niceFacing = F)
+  dev.off()
+
+```
+
+```{r assigning primary TSSs}
+
+operons2 <- data.frame(PosLeft=vector(), PosRight=vector(), strand=vector(), type=vector(), first.cistron=vector())
+for(i in 1:length(unique(operons$Operon))){
+  subs <- operons[operons$Operon == i,]
+  x <- c(min(subs$PosLeft), 
+         max(subs$PosRight),
+         subs$Strand[1], 
+         subs[1,]$Type, 
+         ifelse(subs$Strand[1] == "+", subs$IdGene[1], subs$IdGene[nrow(subs)]))
+  operons2 <- rbind(operons2, x)
+}
+
+colnames(operons2) <- c("PosLeft", "PosRight", "Strand", "Type", "First.cistron")
+operons2$PosLeft <- as.numeric(operons2$PosLeft)
+operons2$PosRight <- as.numeric(operons2$PosRight)
+head(operons2)
+
+
+
+#calculate upstream intergenic region for each operon
+md <- 64 #maximum distance allowed for upstream IGR search window, with fraction of  0.98 of TSSs in Wurtzel et al 2010 Genome Research 
+start.igr <- vector()
+end.igr <- vector()
+
+for(i in 1:nrow(operons2)){
+  s <- operons2$Strand[i]
+  if(s == "+"){
+    nd <- operons2$PosLeft[i] 
+    strt <- ifelse(i>1, max(nd-md, operons2$PosRight[i-1]), operons2$PosLeft[i]-md)
+     }else{
+    strt <- operons2$PosRight[i]
+    nd <- ifelse(i<nrow(operons2), min(strt+md, operons2$PosLeft[i+1]), operons2$PosRight[i] + md)  
+  }
+  start.igr[i] <- strt
+  end.igr[i] <- nd
+}
+igr <- data.frame(start=start.igr, end=end.igr, strand=operons2$Strand)
+
+#take TSS with maximum intensity in IGR with additional requirement for max distance (md) from start codon
+
+prim <- vector() #vector recording primary TSS position
+dist <- vector() #vector recording distance of primary TSS to start codon, i.e. 5'UTR length
+for(i in 1:nrow(igr)){
+ w  <- which(TSS.called.final$strand == igr$strand[i] & dplyr::between(TSS.called.final$genomePos, igr$start[i], igr$end[i]))
+  v <- TSS.called.final[w,]
+  u <- countData[w,]
+  if(length(u)>=8){t <- which.max(u[,1]*u[,2])
+  s <- v[t,1]}else{
+    if(length(u)==4){s <- v[1,1]}else{
+      s <- NA}
+  }
+  prim[i] <- s
+  if(igr$strand[i] == "+"){
+    r <- igr$end[i] - s}else{
+      r <- s - igr$start[i]
+    }
+  dist[i] <- r
+}
+
+#number of primary TSSs
+summary(is.na(prim))
+
+#number of coding operons
+summary(operons2$Type == "CDS")
+
+#number of coding operons with primary TSSs assigned
+sum(!is.na(prim) & operons2$Type == "CDS")
+
+hist(dist[!is.na(prim) & operons2$Type == "CDS"], breaks = md)
+
+#calculate fraction of 5'UTRs <=3 nt, 
+sum(!is.na(dist) & operons2$Type == "CDS" & dist <= 3)/sum(!is.na(dist) & operons2$Type == "CDS")
+
+
+#ggplot histogram
+dist2 <- data.frame(dist=dist[!is.na(dist) & operons2$Type == "CDS"])
+#dist2[dist2 > 20] <- 21
+
+gh <- ggplot(data = dist2, aes(x=dist)) + geom_bar()
+gh <- gh + scale_y_continuous("Frequency", limits=c(0,300), expand=c(0,0)) 
+gh <- gh + scale_x_continuous(limits=c(-1,65), breaks=seq(0,64, by=2), expand=c(0,0)) 
+gh <- gh + theme_bw() + theme(aspect.ratio=0.6, panel.grid = element_blank())
+gh <- gh + scale_fill_manual(values=c("#164450")) + xlab("5' UTR length (nt)")
+gh
+ggsave("../plots/5UTRlegth.bargraph.pdf", plot = gh, path = NULL,
+       scale = 1, width = 160, height = 80, units = c("mm"), limitsize = TRUE)
+```
+
+```{r exporting primary TSS data}
+#export of primary TSS data for coding genes and the two CRISPR arrays, log2-fold change and padj and first downstream cistron to compare to RNA-seq results
+
+primTSS.df <- data.frame(pos = prim[!is.na(prim) & operons2$Type == "CDS"], 
+                         strand = operons2$Strand[!is.na(prim) & operons2$Type == "CDS"],
+                         first.cistron = operons2$First.cistron[!is.na(prim) & operons2$Type == "CDS"])
+
+
+#identify TSSs of CRISPR arrays, searching 50 nt upstream of CRISPR arrays
+crisprTSS <- vector()
+for(i in 1:2){
+  d <- sisl.genome[sisl.genome$V3 == "repeat_region",]
+  crisprTSS[i] <- TSS.called.final$genomePos[between(TSS.called.final$genomePos,
+                                                     ifelse(d$V7[i] == "+", d$V4[i] - 40, d$V5[i]),
+                                                     ifelse(d$V7[i] == "+", d$V4[i], d$V5[i] + 40))]
+}
+
+crisprTSS.df <- data.frame(pos = crisprTSS, 
+                           strand = sisl.genome[sisl.genome$V3 == "repeat_region", 7],
+                           first.cistron = c("id2", "id3"))
+primTSS.df <- rbind(primTSS.df, crisprTSS.df)
+
+#merging deseq.results
+sel.v <- vector()
+for (i in 1:nrow(primTSS.df)){
+  c <- which(TSS.called.final$genomePos == primTSS.df$pos[i]  & TSS.called.final$strand == primTSS.df$strand[i])
+  sel.v[i] <- c
+}
+primTSS.df <- cbind(primTSS.df, deseq.results.df[sel.v,])
+
+write.table(primTSS.df, "../data/Cappable-seq_S.islandicus/deseq.primaryTSSs.txt", col.names=T, row.names=F, quote=F, sep="\t")
+```
+
+
+```{r count internal sense and antisense transcripts}
+#filter gff file for gene entries
+sisl.genome2 <- sisl.genome %>% dplyr::filter(V3 == "gene")
+
+as.count <- vector()
+sense.count <- vector()
+
+for(i in 1:nrow(sisl.genome2)){
+  s <- sisl.genome2$V7[i]
+  a <-sum(dplyr::between(TSS.called.final$genomePos , sisl.genome2$V4[i], sisl.genome2$V5[i]) & TSS.called.final$strand != s)
+  b <-sum(dplyr::between(TSS.called.final$genomePos , 
+                         ifelse(s == "+",  sisl.genome2$V4[i] +1, sisl.genome2$V4[i]), 
+                         ifelse(s == "+",  sisl.genome2$V5[i], sisl.genome2$V5[i] -1)) & 
+                         TSS.called.final$strand == s)
+  as.count[i-1] <- a 
+  sense.count[i-1] <- b
+}
+
+sum(as.count) #number of antisense internal TSSs
+sum(sense.count) #number of sense internal TSSs
+```
+
 
 
