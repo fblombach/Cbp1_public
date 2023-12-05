@@ -1,0 +1,324 @@
+---
+title: "deSeq_SislREY15A"
+author: "Fabian Blombach"
+date: '2023-07-25'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+require(ggplot2)
+require(DESeq2)
+require(rtracklayer)
+require(circlize)
+require(ComplexHeatmap)
+require(dplyr)
+
+#output from featureCounts, subread package
+data <- read.table("../data/RNA-seq_S.islandicus/featureCountsOutput.txt", header=T)
+colnames(data)<- c(colnames(data)[1:6], "WT1", "WT2", "del2", "del3")
+
+#link to coverage data calculated with bedtools genomecov -pc -strand + -bg
+wt.1.plus <- "~/HTS/alignments/27711/S.islandicus_WT1_12cycles.sorted.cov.plus.bw"
+wt.1.minus <- "~/HTS/alignments/27711/S.islandicus_WT1_12cycles.sorted.cov.minus.bw"
+
+#CID coordinates
+cid <- read.table("../genome_data/SislREY15A/CIDs.bed")
+#correction for shift of CID border by 817 bp  to match first AluI restriction site
+
+#CRISPR array coordinates
+crispr <- read.table("../genome_data/SislREY15A/crispr_loci.SislREY15A.bed")
+
+#S. islandicus REY15A genome annotation
+sisl.genome <- import.gff("../genome_data/SislREY15A/GCF_000189555.1_ASM18955v1_genomic.gff")
+sisl.genome.filt <- sisl.genome[sisl.genome$type %in% c("CDS", "repeat_region"),]#filter by features used for count data generation
+
+#operon predition by Operon-mapper (Taboada et al. 2018, Bioinformatics)
+operons <- read.csv("../genome_data/SislREY15A/Operon-mapper.output.csv", header=T)
+
+#Cappable-seq count data for primary TSSs
+cap <- read.table("../data/Cappable-seq_S.islandicus/deseq.primaryTSSs.txt", header=T)
+```
+
+
+```{r filter cbp1 gene}
+cbp1.filt<-which(data$Geneid == "cds1571")
+data <- data[-cbp1.filt,]
+```
+
+```{r count and filter by coverage}
+#coordinates of counted features as GRanges object
+coord <- GRanges(seqnames = data$Chr, ranges = IRanges(start = data$Start, end = data$End), strand = data$Strand)
+
+cov.frac <- vector()
+cov.abs <- vector()
+for(i in 1:nrow(data)){
+  l <- width(coord)[i]
+  d <- data.frame(import.bw(con = if(runValue(strand(coord)[i])  == "+"){wt.1.plus}else{wt.1.minus},
+                       selection = coord[i],
+                       as = "NumericList"))[,3]
+  n <- sum(d == 0)
+  cov.abs[i] <- l-n
+  cov.frac[i] <- (l-n)/l
+}
+
+
+cov.filt <- cov.frac > 0.0
+
+```
+
+```{r QC scatter plots for replicates}
+cor(data[cov.filt,8:11], method="spearman")
+
+
+par(mfrow=c(3,3), mar=c(5,4,2,2))
+for(i in 9:11){
+  for(j in 8:10){
+    out <- heatscatter(data[cov.filt,i], data[cov.filt,j], log="xy", xlab="", ylab="", main="", xlim=c(1,10^6), ylim=c(1,10^6), cex=0.2)
+  }
+}
+
+
+
+
+```
+
+
+
+
+```{r deSeq}
+#set global significance level threshold
+sl <- 0.01
+
+condition <- factor(c("ko","ko","wt","wt"))
+dds <- DESeqDataSetFromMatrix(data[cov.filt,c(7:10)], DataFrame(condition), ~ condition)
+dds <- DESeq(dds)
+deseq.results<-results(dds)
+plotMA(deseq.results, ylim=c(-5,5), alpha = sl)
+
+plotPCA(DESeqTransform(dds), ntop=500, intgroup="condition", returnData=F)
+
+data[cov.filt,][is.na(deseq.results$log2FoldChange) == F & deseq.results$log2FoldChange >0 & deseq.results$padj < sl,]
+data[cov.filt,][is.na(deseq.results$log2FoldChange) == F & deseq.results$log2FoldChange <0 & deseq.results$padj < sl,]
+
+```
+```{r compile Supplementary file}
+
+suppl.file <- cbind(data.frame(sisl.genome.filt)[-cbp1.filt,][cov.filt,c(2:5,10,23)], data[cov.filt,7:10], deseq.results)
+colnames(suppl.file)[7:10] <- paste0(colnames(suppl.file)[7:10], "_rawCount")
+
+write.table(suppl.file, "../data/RNA-seq_S.islandicus/Differential_expression.RNA-seq.REY15A.txt", col.names = T, row.names = F, quote=F, sep="\t")
+```
+
+
+
+```{r volcano plot}
+deseq.results.df <-data.frame(baseMean = deseq.results$baseMean,
+                              log2FoldChange = deseq.results$log2FoldChange,
+                              padj = deseq.results$padj)
+
+crispr.filt <-  data$Geneid[cov.frac > 0.5] %in% c("id2", "id3")
+cid.filt <-                
+
+#volcano plot
+
+#set limit for -log10 padj
+p.lim = 20
+
+g <- ggplot(data=deseq.results.df[!crispr.filt,]) + 
+     geom_hline(aes(yintercept = 2), show.legend = F, lty = 2) +
+     geom_point(aes(x=log2FoldChange, y= ifelse(-log(padj,10) < p.lim, -log(padj,10), p.lim), shape = ifelse(-log(padj,10) < p.lim, "16", "17")), cex=1, alpha=0.05)
+g <- g  + geom_point(data=deseq.results.df[crispr.filt,] , 
+                     aes(x=log2FoldChange, y= ifelse(-log(padj,10) < p.lim, -log(padj,10), p.lim), shape = ifelse(-log(padj,10) < p.lim, "16", "17")), colour="#FFC312", cex=1, alpha=0.8)
+g <- g + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank()) +
+  scale_x_continuous(limits=c(-11,11), breaks=seq(-10, 10,by=2), expand = c(0, 0)) +
+  scale_y_continuous(limits=c(-1, p.lim+1), breaks=seq(0, 120, by=20), expand = c(0, 0)) +
+  ylab("log10(padj)") +
+  xlab("log2-fold change") +
+  theme(legend.position='none')
+g
+#ggplot2::ggsave("../plots/TSS.deseq.png", plot = g, device = "png", path = NULL, scale = 1, width = 80, height = 80, units = c("mm"), limitsize = TRUE)
+```
+
+```{r circos plot}
+
+#calculate mean position for genes
+mean.pos <- vector()
+for(i in 1:nrow(data[cov.filt,])){
+m <- ceiling(mean(data[cov.filt,]$Start[i], data[cov.filt,]$End[i]))
+mean.pos[i] <- m
+}
+
+
+#create data frame
+circos.data <- data.frame(pos=mean.pos, logFC = deseq.results$log2FoldChange, padj =  deseq.results$padj < sl)
+
+#making bed file for circos plotting
+dbed <- data.frame(data[cov.filt, 2:4])
+dbed$logFC = deseq.results$log2FoldChange
+dbed$padj <- deseq.results$padj < sl
+head(dbed)
+
+
+
+#circos plot
+pdf(file=paste0("../plots/circos.padj", sl,".pdf"), width=4, height=4)  
+circos.clear()
+  circos.par("track.height" = 0.6, start.degree = 90, gap.degree = 0, cell.padding = c(0.0, 0,0.0, 0))
+  circos.initializeCircularGenome(name="NC_017276.1", genome_size=2522992, major.by=200000)
+  draw.sector(338.9, 348, rou1 = 1, rou2 = 0.1, clock.wise = F, col = "#ff000010", border=F) 
+#Track showing genomic positions of CIDs
+  circos.genomicTrack(data=cid, ylim=c(0,1), track.height=0.04, panel.fun = function(region, value, ...) {
+      circos.genomicRect(region, value, ybottom = 0, col = "lightgrey", border = "white")
+          }, bg.border = NA)
+#Track showing genomic positions of CRISPR arrays 
+ circos.genomicTrack(data=crispr, ylim=c(0,1), track.height=0.04, panel.fun = function(region, value, ...) {
+    circos.genomicRect(region, value, ybottom = 0, col = "#afdde9ff", border = "#afdde9ff")
+        }, bg.border = NA)
+#Track showing log2FC of genes with color based on padj  
+  circos.genomicTrack(data=dbed, numeric.column=4, track.height=0.64, panel.fun = function(region, value, ...) {
+      circos.genomicPoints(region, value, pch=16, cex=0.4,
+              col = ifelse(value[[2]] == T & value[[1]] > 0, add_transparency("cyan4", transparency=0.4),
+                                  ifelse(value[[2]] == T & value[[1]] < 0, add_transparency("red", transparency=0.4),
+                                        add_transparency("grey", transparency = 0.6))), ...)
+             }, bg.border = NA)
+       circos.segments(x0=0, y0=0, x1=2522992, y1=0)
+  circos.yaxis("right", labels.niceFacing = F)
+  dev.off()
+
+
+```
+
+
+#testing enrichment of downregulated genes in CID 14
+```{r assign operons to CIDs}
+#extract operon start sites
+op.start <- vector()
+for(i in 1:max(operons$Operon)){
+  y <- operons[operons$Operon == i, ]
+  x <- ifelse(y$Strand[1] ==  "+", min(y$PosLeft), max(y$PosRight))
+  op.start[i] <- x
+}
+
+#determine for each operon corresponding CID
+CID.names <- paste0("CID", c(1:(nrow(cid)-1), 1))
+op.CID <- vector()
+for(i in 1:length(op.start)){
+  z <- which(cid$V2 <= op.start[i] & cid$V3 >= op.start[i])
+op.CID[i] <- CID.names[z]  
+}
+
+#assign operons to data, CRISPR loci not included in operon map!
+data <- merge(data, operons[,c(1,5)], by.x="Start",  by.y="PosLeft", all.x=T)
+data$Operon[data$Geneid == "id2"] <- "id2" #manually adding pseudo-operon names for CRISPR arrays
+data$Operon[data$Geneid == "id3"] <- "id3"
+
+#Assigning CIDs to data
+op.CID.df <- data.frame(Operon = 1:max(operons$Operon), CID= op.CID)
+data <- merge(data, op.CID.df, by.x="Operon",  by.y="Operon", all.x=T)
+data$CID[data$Geneid %in% c("id2", "id3")] <- "CID14" #manually assigning CID14 to the CRISPR arrays
+data$CID <- as.factor(data$CID)
+data <- data[order(data$Start, decreasing=F),] #resort the data based on genome position
+
+data[cov.filt,][is.na(deseq.results$log2FoldChange) == F & deseq.results$log2FoldChange >0 & deseq.results$padj < sl,c(1:7,12)]
+data[cov.filt,][is.na(deseq.results$log2FoldChange) == F & deseq.results$log2FoldChange <0 & deseq.results$padj < sl,c(1:7,12)]
+
+#contingency tables for genes in CID
+down.m <- matrix(c(summary(data[cov.filt,][deseq.results$padj < sl & deseq.results$log2FoldChange < 0, ]$CID),
+              summary(data[cov.filt,]$CID) - summary(data[cov.filt,][deseq.results$padj < sl & deseq.results$log2FoldChange < 0, ]$CID)),
+              nrow=2, byrow = T)
+
+up.m <- matrix(c(summary(data[cov.filt,][deseq.results$padj < sl & deseq.results$log2FoldChange > 0, ]$CID),
+              summary(data[cov.filt,]$CID) - summary(data[cov.filt,][deseq.results$padj < sl & deseq.results$log2FoldChange > 0, ]$CID)),
+              nrow=2, byrow = T)
+
+#pairwise Fisher test for one CID vs all other CIDs 
+p.vec.d <- vector()
+for(i in 1:ncol(down.m)){
+  z <- fisher.test(matrix(c(down.m[,i], c(nrow(data[cov.filt,][deseq.results$padj < sl & deseq.results$log2FoldChange < 0, ]), 
+                                     nrow(data[cov.filt,]) - nrow(data[cov.filt,][deseq.results$padj < sl & deseq.results$log2FoldChange < 0, ])) -  down.m[,i]), nrow=2))
+  p.vec.d[i] <- z$p.value
+}
+
+p.vec.u <- vector()
+for(i in 1:ncol(down.m)){
+  z <- fisher.test(matrix(c(up.m[,i], c(nrow(data[cov.filt,][deseq.results$padj < sl & deseq.results$log2FoldChange > 0, ]), 
+                                     nrow(data[cov.filt,]) - nrow(data[cov.filt,][deseq.results$padj < sl & deseq.results$log2FoldChange > 0, ])) -  up.m[,i]), nrow=2))
+  p.vec.u[i] <- z$p.value
+}
+
+
+
+#contingency table for operons in CID
+down.m.op <- matrix(c(summary(unique(data[cov.filt,c(1,12)][deseq.results$padj < sl & deseq.results$log2FoldChange < 0, ])$CID),
+              summary(unique(data[cov.filt,c(1,12)])$CID) - summary(unique(data[cov.filt,c(1,12)][deseq.results$padj < sl & deseq.results$log2FoldChange < 0, ])$CID)),
+              nrow=2, byrow = T)
+
+up.m.op <- matrix(c(summary(unique(data[cov.filt,c(1,12)][deseq.results$padj < sl & deseq.results$log2FoldChange > 0, ])$CID),
+              summary(unique(data[cov.filt,c(1,12)])$CID) - summary(unique(data[cov.filt,c(1,12)][deseq.results$padj < sl & deseq.results$log2FoldChange > 0, ])$CID)),
+              nrow=2, byrow = T)
+
+
+p.vec.d.op <- vector()
+for(i in 1:ncol(down.m.op)){
+  z <- fisher.test(matrix(c(down.m[,i], c(nrow(unique(data[cov.filt,c(1,12)][deseq.results$padj < 0.1 & deseq.results$log2FoldChange < 0, ])), 
+                                     nrow(unique(data[cov.filt,c(1,12)])) - nrow(unique(data[cov.filt,c(1,12)][deseq.results$padj < 0.1 & deseq.results$log2FoldChange < 0, ]))) -  down.m.op[,i]), nrow=2))
+  p.vec.d.op[i] <- z$p.value
+}
+
+
+p.vec.u.op <- vector()
+for(i in 1:ncol(down.m.op)){
+  z <- fisher.test(matrix(c(up.m[,i], c(nrow(unique(data[cov.filt,c(1,12)][deseq.results$padj < 0.1 & deseq.results$log2FoldChange > 0, ])), 
+                                     nrow(unique(data[cov.filt,c(1,12)])) - nrow(unique(data[cov.filt,c(1,12)][deseq.results$padj < 0.1 & deseq.results$log2FoldChange > 0, ]))) -  up.m.op[,i]), nrow=2))
+  p.vec.u.op[i] <- z$p.value
+}
+
+#create data frame for ggplot barplot showing enrichment
+
+enr.op.df <- data.frame(CID = rep(c(1:47)[order(as.character(1:47))], times=2),
+                        reg = c(rep("upregulated", times=47), rep("downregulated", times=47)),
+                        n.reg = c(up.m.op[1,], down.m.op[1,]),
+                        n.op.CID = rep(colSums(up.m.op), times=2),
+                        padj = p.adjust(c(p.vec.u.op, p.vec.d.op), method="bonferroni")
+)
+enr.op.df <- enr.op.df[order(as.numeric(enr.op.df$CID), decreasing=F),]
+enr.op.df$frac <- enr.op.df$n.reg/enr.op.df$n.op.CID
+
+ggplot(data=enr.op.df) + geom_col(aes(x=CID, y=frac, fill=reg), pos="dodge")
+
+```
+
+
+Comparing differential expression analysis of RNA-seq and Cappableseq data
+```{r comparing differential expression analysis of RNA-seq and Cappableseq data}
+#check Cappable-seq data
+head(cap)
+summary(cap$first.cistron %in% data[cov.filt, ]$Geneid) #How many primary TSSs were called and deseqed for genes in filtered RNA-seq data set
+rna.seq <-data.frame(baseMean = deseq.results$baseMean,
+                              log2FoldChange = deseq.results$log2FoldChange,
+                              padj = deseq.results$padj)
+rnaseq$Geneid <- data[cov.filt,]$Geneid #Adding the Geneid to deseq data
+head(rnaseq)
+
+#merging both data frames
+comp <- merge(cap, rnaseq, by.x="first.cistron", by.y="Geneid")
+head(comp)
+dim(comp)
+cor.test(comp$log2FoldChange.x, comp$log2FoldChange.y)
+cor.test(comp$log2FoldChange.x, comp$log2FoldChange.y, method="spearman")
+plot(comp$log2FoldChange.x, comp$log2FoldChange.y)
+
+
+#testing 
+sl <- 0.01
+sig.comp <- matrix(c(sum(comp$padj.x < sl & comp$padj.y < sl),
+                     sum(comp$padj.x < sl & comp$padj.y >= sl),
+                     sum(comp$padj.x >= sl & comp$padj.y < sl),
+                     sum(comp$padj.x >= sl & comp$padj.y >= sl)),
+                     nrow=2)
+fisher.test(sig.comp)
+
+```
+

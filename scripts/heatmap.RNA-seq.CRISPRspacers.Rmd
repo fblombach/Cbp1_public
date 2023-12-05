@@ -1,0 +1,99 @@
+---
+title: "Heatmaps_RNA-seq"
+author: "Fabian Blombach"
+date: "2023-10-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#link to coverage data calculated with bedtools genomecov -pc -strand + -bg
+wt_plus <- "../data/RNA-seq_S.islandicus/WT_mean.cpm.plus.bw"
+wt_minus <- "../data/RNA-seq_S.islandicus/WT_mean.cpm.minus.bw"
+
+cbp1_plus <- "../data/RNA-seq_S.islandicus/cbp1-_mean.cpm.plus.bw"
+cbp1_minus <- "../data/RNA-seq_S.islandicus/cbp1-_mean.cpm.minus.bw"
+
+#link to bed file with spacer coordinates
+spacers <- "../genome_data/SislREY15A/crispr_spacers.bed"
+
+Sys.setenv(wt_plus = wt_plus, wt_minus = wt_minus, cbp1_plus = cbp1_plus, cbp1_minus = cbp1_minus, spacers = spacers)
+
+```
+
+```{bash}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/envs/dt/bin
+mkdir temp
+
+computeMatrix scale-regions -a 12 -b 12 -bs 1 -R $spacers --sortRegions keep -S $wt_plus $wt_minus  -o temp/matrix_wt.npz --samplesLabel watson crick --regionBodyLength 41
+
+computeMatrix scale-regions -a 12 -b 12 -bs 1 -R $spacers --sortRegions keep -S $cbp1_plus $cbp1_minus -o temp/matrix_cbp1.npz --samplesLabel watson crick --regionBodyLength 41
+
+# spacers scaled to 41 bp which is the average spacer legnth in REY15A
+
+# sorting the matrices based on gene orientation
+computeMatrixOperations info -m temp/matrix_wt.npz 
+
+# split samples to subfiles
+computeMatrixOperations subset -m temp/matrix_wt.npz  -o temp/plus.mat.gz --samples watson
+computeMatrixOperations subset -m temp/matrix_wt.npz -o temp/minus.mat.gz --samples crick
+# filter by strand
+computeMatrixOperations filterStrand -m temp/plus.mat.gz -o temp/plus_minus.subset.mat.gz --strand -;
+computeMatrixOperations filterStrand -m temp/plus.mat.gz -o temp/plus_plus.subset.mat.gz --strand +;
+computeMatrixOperations filterStrand -m temp/minus.mat.gz -o temp/minus_minus.subset.mat.gz --strand -;
+computeMatrixOperations filterStrand -m temp/minus.mat.gz -o temp/minus_plus.subset.mat.gz --strand +;
+# merge sense and antisense orientation
+computeMatrixOperations rbind -m temp/plus_plus.subset.mat.gz temp/minus_minus.subset.mat.gz -o temp/sense.mat.gz;
+computeMatrixOperations rbind -m temp/plus_minus.subset.mat.gz temp/minus_plus.subset.mat.gz -o temp/antisense.mat.gz
+# restore order of genes by using reference file used to create matrix
+computeMatrixOperations sort -m temp/sense.mat.gz  -o temp/sorted_sense.mat.gz -R $spacers
+computeMatrixOperations sort -m temp/antisense.mat.gz  -o temp/sorted_antisense.mat.gz -R $spacers
+# combine files to one
+computeMatrixOperations cbind -m temp/sorted_sense.mat.gz temp/sorted_antisense.mat.gz -o temp/matrix_wtSorted.mat.gz 
+
+# remove temporary files
+rm temp/plus.mat.gz temp/minus.mat.gz temp/plus_minus.subset.mat.gz temp/plus_plus.subset.mat.gz temp/minus_minus.subset.mat.gz temp/minus_plus.subset.mat.gz temp/sorted_sense.mat.gz temp/sorted_antisense.mat.gz temp/sense.mat.gz temp/antisense.mat.gz
+
+# repeat for replicate 2
+# sorting the matrices based on gene orientation
+computeMatrixOperations info -m temp/matrix_cbp1.npz 
+
+# split samples to subfiles
+computeMatrixOperations subset -m temp/matrix_cbp1.npz  -o temp/plus.mat.gz --samples watson
+computeMatrixOperations subset -m temp/matrix_cbp1.npz -o temp/minus.mat.gz --samples crick
+# filter by strand
+computeMatrixOperations filterStrand -m temp/plus.mat.gz -o temp/plus_minus.subset.mat.gz --strand -;
+computeMatrixOperations filterStrand -m temp/plus.mat.gz -o temp/plus_plus.subset.mat.gz --strand +;
+computeMatrixOperations filterStrand -m temp/minus.mat.gz -o temp/minus_minus.subset.mat.gz --strand -;
+computeMatrixOperations filterStrand -m temp/minus.mat.gz -o temp/minus_plus.subset.mat.gz --strand +;
+# merge sense and antisense orientation
+computeMatrixOperations rbind -m temp/plus_plus.subset.mat.gz temp/minus_minus.subset.mat.gz -o temp/sense.mat.gz;
+computeMatrixOperations rbind -m temp/plus_minus.subset.mat.gz temp/minus_plus.subset.mat.gz -o temp/antisense.mat.gz
+# restore order of genes by using reference file used to create matrix
+computeMatrixOperations sort -m temp/sense.mat.gz  -o temp/sorted_sense.mat.gz -R $spacers
+computeMatrixOperations sort -m temp/antisense.mat.gz  -o temp/sorted_antisense.mat.gz -R $spacers
+# combine files to one
+computeMatrixOperations cbind -m temp/sorted_sense.mat.gz temp/sorted_antisense.mat.gz -o temp/matrix_cbp1Sorted.mat.gz 
+
+# remove temporary files
+rm temp/plus.mat.gz temp/minus.mat.gz temp/plus_minus.subset.mat.gz temp/plus_plus.subset.mat.gz temp/minus_minus.subset.mat.gz temp/minus_plus.subset.mat.gz temp/sorted_sense.mat.gz temp/sorted_antisense.mat.gz temp/sense.mat.gz temp/antisense.mat.gz 
+
+```
+
+plotting heatmaps for RNA-seq
+```{bash}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/envs/dt/bin
+
+#set max for heatmap scale
+max=250
+plotHeatmap --whatToShow 'heatmap and colorbar' -m temp/matrix_wtSorted.mat.gz   --colorList '#ffffff,#52676eff' '#ffffff,#52676eff' --colorNumber 256 --heatmapHeight 10  --missingDataColor '#ffffff' --samplesLabel plus minus -o ../plots/heatmap.rnaSeq.WT.spacers.pdf  --boxAroundHeatmaps yes --zMax $max
+
+plotHeatmap --whatToShow 'heatmap and colorbar' -m temp/matrix_cbp1Sorted.mat.gz   --colorList '#ffffff,#52676eff' '#ffffff,#52676eff' --colorNumber 256 --heatmapHeight 10  --missingDataColor '#ffffff' --samplesLabel plus minus -o ../plots/heatmap.rnaSeq.cbp1.spacers.pdf  --boxAroundHeatmaps yes --zMax $max
+
+# rm temp/matrix_wtSorted.mat.gz temp/matrix_cbp1Sorted.mat.gz
+
+
+
+```
+
