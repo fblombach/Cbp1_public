@@ -40,6 +40,7 @@ sisl.genome <- sisl.genome[-c(1, nrow(sisl.genome)),] #remove first and last row
 #operon predition by Operon-mapper (Taboada et al. 2018, Bioinformatics)
 operons <- read.csv("../genome_data/SislREY15A/Operon-mapper.output.csv", header=T)
 
+
 require(rtracklayer)
 require(DESeq2)
 require(ggplot2)
@@ -182,8 +183,8 @@ deseq.results.df <-data.frame(baseMean = deseq.results$baseMean,
                               log2FoldChange = deseq.results$log2FoldChange,
                               padj = deseq.results$padj)
 
-crispr.filt <-  TSS.called.final$genomePos %in% crispr_loci[1,2]:crispr_loci[1,3] |
-                TSS.called.final$genomePos %in% crispr_loci[2,2]:crispr_loci[2,3]
+crispr.filt <-  TSS.called.final$genomePos %in% crispr[1,2]:crispr[1,3] |
+                TSS.called.final$genomePos %in% crispr[2,2]:crispr[2,3]
 
 
 nonCRISPR.filt <- vector(length = nrow(TSS.called.final))
@@ -489,6 +490,10 @@ for(i in 1:nrow(sisl.genome2)){
 sum(as.count) #number of antisense internal TSSs
 sum(sense.count) #number of sense internal TSSs
 ```
+
+
+
+
 
 
 

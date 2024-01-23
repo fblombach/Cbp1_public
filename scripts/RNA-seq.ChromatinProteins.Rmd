@@ -1,0 +1,122 @@
+---
+title: "RNA-seq.chromatinProteins"
+author: "Fabian Blombach"
+date: "2023-12-01"
+output: html_document
+---
+
+This script quantifies cbp1, cren7, sul7, alba, and alba2 transcript levels in different Sulfolobus species and strains: S. islandicus REY15A and LAL14/1 and S. solfataricus P2
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+require(rtracklayer)
+
+#Import genome files
+REY15Ag <- "../genome_data/SislREY15A/GCF_000189555.1_ASM18955v1_genomic.gff"
+REY15A.genome <- import.gff(REY15Ag)
+REY15A.genome.filt <- REY15A.genome[REY15A.genome$type %in% c("CDS"),]#filter by features used for count data generation
+
+#LAL141g <- "../genome_data/SisLAL141_SIRV2/GCF_000364745.1_ASM36474v1_genomic.gff"
+#LAL141.genome <- import.gff(LAL141g)
+#LAL141.genome.filt <- LAL141.genome[LAL141.genome$type %in% c("CDS"),]#filter by features used for count data generation
+
+P2g <- "../genome_data/SsoP2/Wurtzel.gff"
+P2.genome <- import.gff(P2g)
+P2.genome.filt <- P2.genome[P2.genome$type %in% c("CDS"),]#filter by features used for count data generation
+
+#Links to RNA-seq data
+
+#RNA-seq data from Blombach et al 2021, Nat Comm., doi: https://doi.org/10.1038/s41467-021-25669-2, paired-end, data were aligned as described in paper 
+P2r1 <- "../../RNA-seq/SsoP2_Jan2018/expon1.sorted.bam"
+P2r2 <- "../../RNA-seq/SsoP2_Jan2018/expon2.sorted.bam"
+
+#RNA-seq data from this paper, paired-end
+REY15Ar1 <- "../data/RNA-seq_S.islandicus/bam_files/S.islandicus_WT1_12cycles.20bp.v2.best.sorted.flag2.bam"
+REY15Ar2 <- "../data/RNA-seq_S.islandicus/bam_files/S.islandicus_WT2_12cycles.20bp.v2.best.sorted.flag2.bam"
+
+#RNA-seq data from Quax et al. 2013, J. Virol, doi: https://doi.org/10.1128/JVI.01020-13, single read
+#LAL141r1 <-
+#LAL141r2 <-
+
+Sys.setenv (REY15Ag = REY15Ag,
+            #LAL141g = LAL141g,
+            P2g = P2g,
+            P2r1 = P2r1,
+            P2r2 = P2r2,
+            REY15Ar1 = REY15Ar1,
+            REY15Ar2 = REY15Ar2
+            )
+```
+
+```{bash featureCounts}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/envs/featureCount/bin
+
+featureCounts  -s 1  -d 25 -p --countReadPairs -B -t CDS -g locus_tag   -a $REY15Ag -o ../temp/featureCountsOutput.REY15A.txt  $REY15Ar1 $REY15Ar2
+
+featureCounts  -s 1  -d 25 -p --countReadPairs -B -t CDS -g locus_tag   -a $P2g -o ../temp/featureCountsOutput.P2.txt  $P2r1 $P2r2
+```
+
+```{r data import and extracting FPM or RPKM values}
+data.REY15A <- read.table("../temp/featureCountsOutput.REY15A.txt", header=T)
+colnames(data.REY15A)<- c(colnames(data)[1:6], "r1", "r2")
+
+data.P2 <-  read.table("../temp/featureCountsOutput.P2.txt", header=T)
+colnames(data.P2)<- c(colnames(data.P2)[1:6], "r1", "r2")
+
+#calculate reads per kilobase (RPK)
+data.P2$Start <- as.integer(data.P2$Start)
+data.P2$End <- as.integer(data.P2$End)
+data.P2$RPK.r1 <- data.P2$r1/(data.P2$End - data.P2$Start+1)*1000
+data.P2$RPK.r2 <- data.P2$r2/(data.P2$End - data.P2$Start+1)*1000
+
+data.REY15A$Start <- as.integer(data.REY15A$Start)
+data.REY15A$End <- as.integer(data.REY15A$End)
+data.REY15A$RPK.r1 <- data.REY15A$r1/(data.REY15A$End - data.REY15A$Start+1)*1000
+data.REY15A$RPK.r2 <- data.REY15A$r2/(data.REY15A$End - data.REY15A$Start+1)*1000
+
+#calculate scaling factor
+sf.P2.r1 <- sum(data.P2$RPK.r1[!is.na(data.P2$RPK.r1)])/10^6
+sf.P2.r2 <- sum(data.P2$RPK.r2[!is.na(data.P2$RPK.r2)])/10^6
+
+sf.REY15A.r1 <- sum(data.REY15A$RPK.r1[!is.na(data.REY15A$RPK.r1)])/10^6
+sf.REY15A.r2 <- sum(data.REY15A$RPK.r2[!is.na(data.REY15A$RPK.r2)])/10^6
+
+#calculate TPM
+data.P2$TPM.r1 <- data.P2$RPK.r1/sf.P2.r1
+data.P2$TPM.r2 <- data.P2$RPK.r2/sf.P2.r2
+
+data.REY15A$TPM.r1 <- data.REY15A$RPK.r1/sf.REY15A.r1
+data.REY15A$TPM.r2 <- data.REY15A$RPK.r2/sf.REY15A.r2
+
+#average
+data.P2$TPM.mean <- (data.P2$TPM.r1 + data.P2$TPM.r2)/2
+data.REY15A$TPM.mean <- (data.REY15A$TPM.r1 + data.REY15A$TPM.r2)/2
+```
+
+
+```{r chromatin proteins}
+#Locus tags for chromatin proteins
+chrom.prots <- data.frame(prot = c("Alba", "Alba2", "Sul7d", "Cren7", "Cbp1"),
+                          P2 = c("SSO0962","SSO6877", "SSO10610", "SSO6901", "SSO0454"),
+                          REY15A = c("SIRE_RS05695", "SIRE_RS05685", "SIRE_RS03405", "SIRE_RS05625", "SIRE_RS07845"),
+                          REY15A.starts = c(1085723, 1081869, 637838, 1068224,1440772))
+
+
+rows.P2<-vector()
+for(i in 1:5){rows.P2[i] <- which(data.P2$Geneid == chrom.prots$P2[i])}
+
+rows.REY15A<-vector()
+for(i in 1:5){rows.REY15A[i] <- which(data.REY15A$Start == chrom.prots$REY15A.starts[i])} #prechecked that starts are unique. featureCounts refuses to use locus-tags in REY15A gff file.
+
+
+chrom.prots$TPM.P2.r1 <- data.P2$TPM.r1[rows.P2]
+chrom.prots$TPM.P2.r2 <- data.P2$TPM.r2[rows.P2]
+chrom.prots$TPM.REY15A.r1 <- data.REY15A$TPM.r1[rows.REY15A]
+chrom.prots$TPM.REY15A.r2 <- data.REY15A$TPM.r2[rows.REY15A]
+
+chrom.prots <- chrom.prots[,-4]
+chrom.prots
+
+```
+

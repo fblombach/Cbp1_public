@@ -18,6 +18,7 @@ inp_r2 <- "../../data_analysis/resampled_data/expon/r2/input.expon_r2.mean120.sd
 crispr_loci <- "../genome_data/SsoP2/crispr_loci.bed"
 
 require(idr)
+require(ggplot2)
 
 Sys.setenv(cbp1_r1 = cbp1_r1,
           cbp1_r2 = cbp1_r2,
@@ -128,5 +129,54 @@ write.table(filteredPeaks2[filteredPeaks2$enrichment.average > 5,c(1,14:16,13)],
 
 #write subset with minimum 5-fold enrichment in peaks as Supplemental File 1
 write.table(filteredPeaks2[filteredPeaks2$enrichment.average > 5,c(1,14:16,13,11,12)], "../data/SupplementalFile1.S.solfataricusP2.Cbp1_peaks.txt", quote=F, col.names=T, row.names=F, sep="\t")
+```
+
+```{r QC plot}
+#scatter plot depicting matched and unmatched peaks for both replicates, the IDR filtering and the correlation for the set of matched peaks and its subsets
+colnames(matchedPeaks) <- c("nucleotide.r1", "start.r1", "end.r1", "peak.r1", "score.r1",
+                              "nucleotide.r2", "start.r2", "end.r2", "peak.r2", "score.r2",
+                              "enrichment.replicate1", "enrichment.replicate2", "enrichment.average") 
+
+#subsets for unmatched peaks in r1 and r2
+filtPeaks.r1 <- read.table("../macs2_Sso/macs2_SsoCbp1_r1_summits.filt.bed")
+unmatched.r1 <- narrow.r1[!narrow.r1$V4 %in% matchedPeaks$peak.r1 & narrow.r1$V4 %in% filtPeaks.r1$V4,]
+filtPeaks.r2 <- read.table("../macs2_Sso/macs2_SsoCbp1_r2_summits.filt.bed")
+unmatched.r2 <- narrow.r2[!narrow.r2$V4 %in% matchedPeaks$peak.r2 & narrow.r2$V4 %in% filtPeaks.r2$V4,]
+
+#plot
+  #color based on peak category: passes IDR, passes min 5 enrichment threshold
+matchedPeaks$IDR <- idr.out$IDR
+col.v <- as.factor(vector())
+levels(col.v) <- c("3", "2", "1")
+for(i in 1:nrow(matchedPeaks)){
+  j <- if(matchedPeaks$IDR[i] >= 0.01){"1"}else{
+          if(matchedPeaks$enrichment.average[i] <= 5){"2"}else{"3"}}
+  col.v[i] <- j
+  }
+matchedPeaks$col.v <- col.v
+
+#calculating R2 for all matched peaks, IDR filtered and enrichment filtered peaks
+r2.all <- summary(lm(matchedPeaks$enrichment.replicate1 ~ 0 + matchedPeaks$enrichment.replicate2))$r.squared
+r2.idr <- summary(lm(matchedPeaks$enrichment.replicate1[matchedPeaks$col.v %in% c(2,3)] ~ 0 + matchedPeaks$enrichment.replicate2[matchedPeaks$col.v %in% c(2,3)]))$r.squared 
+r2.enr <- summary(lm(matchedPeaks$enrichment.replicate1[matchedPeaks$col.v == 3] ~ 0 + matchedPeaks$enrichment.replicate2[matchedPeaks$col.v == 3]))$r.squared 
+ 
+g <- ggplot(data = matchedPeaks, aes(x = log(enrichment.replicate1, 2), y = log(enrichment.replicate2, 2), col = col.v))
+g <- g + geom_point(cex=1, alpha = 0.25) + scale_colour_viridis_d(option="plasma", direction = 1)
+g <- g + geom_point(data=unmatched.r1, aes(x=log(V7,2), y=0), col="lightgrey", cex=1, alpha = 0.25)
+g <- g + geom_point(data=unmatched.r2, aes(x=0, y=log(V7,2)), col="lightgrey", cex=1, alpha = 0.25)
+g <- g + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank(), legend.position='none') +
+  scale_x_continuous(limits=c(-0.5,8.5), breaks=seq(0, 10,by=2), expand = c(0, 0)) +
+  scale_y_continuous(limits=c(-0.5,8.5), breaks=seq(0, 10, by=2), expand = c(0, 0)) +
+  xlab("log2(enrichment replicate 1)") +
+  ylab("log2(enrichment replicate 2)") +
+  ggtitle(paste0("R2 = ", 
+                 round(r2.all, 2), " for all matched peaks, \n",
+                 round(r2.idr, 2), " for peaks filtered by IDR < 0.01, and \n", 
+                 round(r2.enr, 2), " for IDR-filtered peaks with > 5 enrichment"))
+g
+
+ggplot2::ggsave("../plots/QC_peakCallingSsoCbp1.pdf", plot = g, device = "pdf", path = NULL,
+      scale = 1, width = 80, height = 80, units = c("mm"), limitsize = TRUE)
+
 ```
 

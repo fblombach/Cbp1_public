@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 require(idr)
 require(rtracklayer)
+require(ggplot2)
 
 
 #PLEASE NOTE: Due to space limitations, the alignment files are not available on github nor on NCBI. Raw Fastq data (and bigwig coverage tracks) are available at NCBI GEO under superseries GSE226026 (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE226026). Once the paired-end reads were aligned, and converted to bed file format using BEDtools bamtobed (https://bedtools.readthedocs.io/en/latest/content/tools/bamtobed.html), the alignments were sampled to match a normal distribution with the indicated mean and standard deviation as stated below (https://github.com/fblombach/ChIP-seq/blob/master/read_sampling.R). 
@@ -25,10 +26,11 @@ inp_LAL141_SIRV2_r2 <- "../../alignments/18452R/X28_input_Sis_LAL14_1_SIRV2_r2.m
 
 #crispr arrays
 genome.gff <- import.gff("../genome_data/SisLAL141_SIRV2/GCF_000364745.1_ASM36474v1_genomic.gff")
-crispr_loci.sub <- subset(genome.gff, type=="direct_repeat")
-crispr_loci.sub$score <- 1
-crispr_loci <- "temp/crispr_loci.bed"
-export.bed(crispr_loci.sub, crispr_loci)
+crispr_loci.rRNA.sub <- subset(genome.gff, type %in% c("direct_repeat", "rRNA"))
+crispr_loci.rRNA.sub$score <- 1
+crispr_loci.rRNA.sub <- crispr_loci.rRNA.sub[-c(3:5)] #remove CRISPR arrays3,4,5 that do have different repeat consensus
+crispr_loci.rRNA <- "../temp/crispr_loci.rRNA.bed"
+export.bed(crispr_loci.rRNA.sub, crispr_loci.rRNA)
 
 Sys.setenv (cbp1_LAL141_r1 = cbp1_LAL141_r1,
             cbp1_LAL141_r2 = cbp1_LAL141_r2,
@@ -38,7 +40,7 @@ Sys.setenv (cbp1_LAL141_r1 = cbp1_LAL141_r1,
             inp_LAL141_r2 = inp_LAL141_r2,
             inp_LAL141_SIRV2_r1 = inp_LAL141_SIRV2_r1,
             inp_LAL141_SIRV2_r2 = inp_LAL141_SIRV2_r2,
-            crispr_loci = crispr_loci
+            crispr_loci_rRNA = crispr_loci.rRNA
             )
 ```
 
@@ -57,26 +59,29 @@ macs2 callpeak --outdir ../macs2_SisLAL141/  -n macs2_LAL141_SIRV2_Cbp1_r2 -f BE
 
 
 #removing summits within CRISPR arrays
-bedtools intersect -v -a ../macs2_SisLAL141/macs2_LAL141_Cbp1_r1_summits.bed -b $crispr_loci > ../macs2_SisLAL141/macs2_LAL141_Cbp1_r1_summits.filt.bed
+bedtools intersect -v -a ../macs2_SisLAL141/macs2_LAL141_Cbp1_r1_summits.bed -b $crispr_loci_rRNA > ../macs2_SisLAL141/macs2_LAL141_Cbp1_r1_summits.filt.bed
 
-bedtools intersect -v -a ../macs2_SisLAL141/macs2_LAL141_Cbp1_r2_summits.bed -b $crispr_loci > ../macs2_SisLAL141/macs2_LAL141_Cbp1_r2_summits.filt.bed
+bedtools intersect -v -a ../macs2_SisLAL141/macs2_LAL141_Cbp1_r2_summits.bed -b $crispr_loci_rRNA > ../macs2_SisLAL141/macs2_LAL141_Cbp1_r2_summits.filt.bed
 
-bedtools intersect -v -a ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r1_summits.bed -b $crispr_loci > ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r1_summits.filt.bed
+bedtools intersect -v -a ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r1_summits.bed -b $crispr_loci_rRNA > ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r1_summits.filt.bed
 
-bedtools intersect -v -a ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r2_summits.bed -b $crispr_loci > ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r2_summits.filt.bed
+bedtools intersect -v -a ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r2_summits.bed -b $crispr_loci_rRNA > ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r2_summits.filt.bed
 
 #matching peaks for the two replciates based on summits positions
 bedtools window -w 40 -a ../macs2_SisLAL141/macs2_LAL141_Cbp1_r1_summits.filt.bed -b ../macs2_SisLAL141/macs2_LAL141_Cbp1_r2_summits.filt.bed > ../macs2_SisLAL141/matchedPeaks.LAL141_Cbp1.w40.bed
 bedtools window -w 40 -a ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r1_summits.filt.bed -b ../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r2_summits.filt.bed > ../macs2_SisLAL141/matchedPeaks.LAL141_SIRV2_Cbp1.w40.bed
 ```
 
-#importing peak files
+#importing peak files for LAL14/1 without SIRV2
 ```{r}
 matchedPeaks <- read.table("../macs2_SisLAL141/matchedPeaks.LAL141_Cbp1.w40.bed")
+matchedPeaks <- matchedPeaks[matchedPeaks$V1 == "NC_021058.1",] #filter out peaks on SIRV2 genome
 
-#narrowPeak files with enrichment for peaks in each replicate
+#narrowPeak files with enrichment for peaks in each replicate and filter peaks regions overlapping with CRISPR and rRNA loci
 narrow.r1 <- read.table("../macs2_SisLAL141/macs2_LAL141_Cbp1_r1_peaks.narrowPeak")
+narrow.r1 <- narrow.r1[-queryHits(findOverlaps(IRanges(start = narrow.r1$V2, end = narrow.r1$V3), ranges(crispr_loci.rRNA.sub))),]
 narrow.r2 <- read.table("../macs2_SisLAL141/macs2_LAL141_Cbp1_r2_peaks.narrowPeak")
+narrow.r2 <- narrow.r2[-queryHits(findOverlaps(IRanges(start = narrow.r2$V2, end = narrow.r2$V3), ranges(crispr_loci.rRNA.sub))),]
 
 #adding enrichment values (7th column) to matched peak file and calculate the mean
 matchedPeaks <- merge(matchedPeaks, narrow.r1[,c(4,7)], by.x="V4", by.y="V4")
@@ -137,12 +142,23 @@ filteredPeaks <- matchedPeaks[idr.out$IDR < 0.01,]
 filteredPeaks$start <- ceiling(rowMeans(filteredPeaks[,c(2,7)]))
 filteredPeaks$end <- filteredPeaks$start + 1
 filteredPeaks$peak <- paste0("cbp1_peak", 1:nrow(filteredPeaks))
-colnames(filteredPeaks) <- c("nucleotide", "start.r1", "start.r1", "peak.r1", "scoare.r1",
-                              "nucleotide", "start.r2", "start.r2", "peak.r2", "scoare.r2",
+colnames(filteredPeaks) <- c("nucleotide", "start.r1", "end.r1", "peak.r1", "score.r1",
+                              "nucleotide", "start.r2", "end.r2", "peak.r2", "score.r2",
                               "enrichment.replicate1", "enrichment.replicate2", "enrichment.average", "start", "end", "peak") #column names for Supplemental File 3
 
 #writing data set with global IDR < 0.01
 write.table(filteredPeaks[,c(1,14:16,13)], "../data/SislLAL141.Cbp1_pooled_IDRfilteredPeaks_summits.bed", col.names = F, row.names = F, sep="\t", quote = FALSE)
+
+#writing data set with a more generous setting of global IDR < 0.05
+filteredPeaks2 <- matchedPeaks[idr.out$IDR < 0.05,]
+filteredPeaks2$start <- ceiling(rowMeans(filteredPeaks2[,c(2,7)]))
+filteredPeaks2$end <- filteredPeaks2$start + 1
+filteredPeaks2$peak <- paste0("cbp1_peak", 1:nrow(filteredPeaks2), "IDR0.05")
+colnames(filteredPeaks2) <- c("nucleotide", "start.r1", "end.r1", "peak.r1", "score.r1",
+                              "nucleotide", "start.r2", "end.r2", "peak.r2", "score.r2",
+                              "enrichment.replicate1", "enrichment.replicate2", "enrichment.average", "start", "end", "peak") 
+write.table(filteredPeaks2[,c(1,14:16,13)], "../data/SislLAL141.Cbp1_pooled_IDR0p05filteredPeaks_summits.bed", col.names = F, row.names = F, sep="\t", quote = FALSE)
+
 
 #subset with minimum 5-fold enrichment in peaks (average between two replicates)
 write.table(filteredPeaks[filteredPeaks$enrichment.average > 5,c(1,14:16,13)], "../data/SislLAL141.Cbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bed", quote=F, col.names=F, row.names=F, sep="\t")
@@ -153,14 +169,65 @@ write.table(filteredPeaks[filteredPeaks$enrichment.average > 5,c(1,14:16,13,11,1
 ```
 
 
+```{r QC plot LAL141 }
+#scatter plot depicting matched and unmatched peaks for both replicates, the IDR filtering and the correlation for the set of matched peaks and its subsets
+colnames(matchedPeaks) <- c("nucleotide.r1", "start.r1", "end.r1", "peak.r1", "score.r1",
+                              "nucleotide.r2", "start.r2", "end.r2", "peak.r2", "score.r2",
+                              "enrichment.replicate1", "enrichment.replicate2", "enrichment.average") 
+matchedPeaks$IDR <- idr.out$IDR
+#subsets for unmatched peaks in r1 and r2
+filtPeaks.r1 <- read.table("../macs2_SisLAL141/macs2_LAL141_Cbp1_r1_summits.bed")
+unmatched.r1 <- narrow.r1[!narrow.r1$V4 %in% matchedPeaks$peak.r1 & narrow.r1$V4 %in% filtPeaks.r1$V4,]
+filtPeaks.r2 <- read.table("../macs2_SisLAL141/macs2_LAL141_Cbp1_r2_summits.filt.bed")
+unmatched.r2 <- narrow.r2[!narrow.r2$V4 %in% matchedPeaks$peak.r2 & narrow.r2$V4 %in% filtPeaks.r2$V4,]
+
+#plot
+  #color based on peak category: passes IDR, passes min 5 enrichment threshold
+col.v <- as.factor(vector())
+levels(col.v) <- c("3", "2", "1")
+for(i in 1:nrow(matchedPeaks)){
+  j <- if(matchedPeaks$IDR[i] >= 0.01){"1"}else{
+          if(matchedPeaks$enrichment.average[i] <= 5){"2"}else{"3"}}
+  col.v[i] <- j
+  }
+matchedPeaks$col.v <- col.v
+
+#calculating R2 for all matched peaks, IDR filtered and enrichment filtered peaks
+r2.all <- summary(lm(log(matchedPeaks$enrichment.replicate1) ~ 0 + log(matchedPeaks$enrichment.replicate2)))$r.squared
+r2.idr <- summary(lm(log(matchedPeaks$enrichment.replicate1)[matchedPeaks$col.v %in% c(2,3)] ~ 0 + log(matchedPeaks$enrichment.replicate2)[matchedPeaks$col.v %in% c(2,3)]))$r.squared 
+r2.enr <- summary(lm(log(matchedPeaks$enrichment.replicate1)[matchedPeaks$col.v == 3] ~ 0 + log(matchedPeaks$enrichment.replicate2)[matchedPeaks$col.v == 3]))$r.squared 
+ 
+g <- ggplot(data = matchedPeaks, aes(x = log(enrichment.replicate1, 2), y = log(enrichment.replicate2, 2), col = col.v))
+g <- g + geom_point(cex=1, alpha = 0.25) + scale_colour_viridis_d(option="plasma", direction = 1)
+g <- g + geom_point(data=unmatched.r1, aes(x=log(V7,2), y=0), col="lightgrey", cex=1, alpha = 0.25)
+g <- g + geom_point(data=unmatched.r2, aes(x=0, y=log(V7,2)), col="lightgrey", cex=1, alpha = 0.25)
+g <- g + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank(), legend.position='none') +
+  scale_x_continuous(limits=c(-0.5,8.5), breaks=seq(0, 10,by=2), expand = c(0, 0)) +
+  scale_y_continuous(limits=c(-0.5,8.5), breaks=seq(0, 10, by=2), expand = c(0, 0)) +
+  xlab("log2(enrichment replicate 1)") +
+  ylab("log2(enrichment replicate 2)") +
+  ggtitle(paste0("R2 = ", 
+                 round(r2.all, 2), " for all matched peaks, \n",
+                 round(r2.idr, 2), " for peaks filtered by IDR < 0.01, and \n", 
+                 round(r2.enr, 2), " for IDR-filtered peaks with > 5 enrichment"))
+g
+
+ggplot2::ggsave("../plots/QC_peakCallingSislLAL141_Cbp1.pdf", plot = g, device = "pdf", path = NULL,
+      scale = 1, width = 80, height = 80, units = c("mm"), limitsize = TRUE)
+
+```
+
 
 #importing peak files for SIRV2 infected cells
 ```{r}
 matchedPeaks.SIRV2 <- read.table("../macs2_SisLAL141/matchedPeaks.LAL141_SIRV2_Cbp1.w40.bed")
+matchedPeaks.SIRV2 <- matchedPeaks.SIRV2[matchedPeaks.SIRV2$V1 == "NC_021058.1",] #filter out peaks on SIRV2 genome
 
 #narrowPeak files with enrichment for peaks in each replicate
 narrow.r1.SIRV2 <- read.table("../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r1_peaks.narrowPeak")
+narrow.r1.SIRV2 <- narrow.r1.SIRV2[-queryHits(findOverlaps(IRanges(start = narrow.r1.SIRV2$V2, end = narrow.r1.SIRV2$V3), ranges(crispr_loci.rRNA.sub))),]
 narrow.r2.SIRV2 <- read.table("../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r2_peaks.narrowPeak")
+narrow.r2.SIRV2 <- narrow.r2.SIRV2[-queryHits(findOverlaps(IRanges(start = narrow.r2.SIRV2$V2, end = narrow.r2.SIRV2$V3), ranges(crispr_loci.rRNA.sub))),]
 
 #adding enrichment values (7th column) to matched peak file and calculate the mean
 matchedPeaks.SIRV2 <- merge(matchedPeaks.SIRV2, narrow.r1.SIRV2[,c(4,7)], by.x="V4", by.y="V4")
@@ -184,7 +251,7 @@ rho <- 0.8
 # proportion p of the reproducible component (i.e. fraction of peaks with reproducible ranking, i.e. calculated global IDR < 0.01) 
 p <- 0.7
 
-idr.out <- est.IDR(x, mu, sigma, rho, p, eps=0.001, max.ite=100) 
+idr.out.SIRV2 <- est.IDR(x, mu, sigma, rho, p, eps=0.001, max.ite=100) 
 
 # eps defines stopping criterion based on log likelihood increment 
 # max.ite defines the number of maximum iterations
@@ -195,10 +262,10 @@ idr.out <- est.IDR(x, mu, sigma, rho, p, eps=0.001, max.ite=100)
 # $IDR	the “global IDR”, i.e. the combined IDR for  
 
 # check estimated parameters
-idr.out$para
+idr.out.SIRV2$para
 # visualise data with correspondence profiles
-rank1 <- rank(matchedPeaks$V5)
-rank2 <- rank(matchedPeaks$V10)
+rank1 <- rank(matchedPeaks.SIRV2$V5)
+rank2 <- rank(matchedPeaks.SIRV2$V10)
 l <- 1/length(rank1)
 gc <- get.correspondence (rank1, rank2, seq(0.01,0.99, by=l))
 plot(gc$psi$t, gc$psi$value, xlab="t", ylab="psi", xlim=c(0,max(gc$psi$t)), ylim = c(0, max(gc$psi$value)), cex.lab=2)
@@ -214,7 +281,7 @@ abline(h=1, lty=3)
 
 ```{r filtering for local IDR}
 #filter peaks by local idr
-filteredPeaks.SIRV2 <- matchedPeaks.SIRV2[idr.out$IDR < 0.01,]
+filteredPeaks.SIRV2 <- matchedPeaks.SIRV2[idr.out.SIRV2$IDR < 0.01,]
 
 #calculating mean summit positions and renumbering peaks
 filteredPeaks.SIRV2$start <- ceiling(rowMeans(filteredPeaks.SIRV2[,c(2,7)]))
@@ -228,12 +295,153 @@ colnames(filteredPeaks.SIRV2) <- c("nucleotide", "start.r1", "start.r1", "peak.r
 
 write.table(filteredPeaks.SIRV2[,c(1,14:16,13)], "../data/SislLAL141_SIRV2.Cbp1_pooled_IDRfilteredPeaks_summits.bed", col.names = F, row.names = F, sep="\t", quote = FALSE)
 
+#writing data set with a more generous setting of global IDR < 0.05
+filteredPeaks2.SIRV2 <- matchedPeaks.SIRV2[idr.out.SIRV2$IDR < 0.05,]
+filteredPeaks2.SIRV2$start <- ceiling(rowMeans(filteredPeaks2.SIRV2[,c(2,7)]))
+filteredPeaks2.SIRV2$end <- filteredPeaks2.SIRV2$start + 1
+filteredPeaks2.SIRV2$peak <- paste0("cbp1_peak", 1:nrow(filteredPeaks2.SIRV2), "IDR0.05")
+colnames(filteredPeaks2.SIRV2) <- c("nucleotide", "start.r1", "end.r1", "peak.r1", "score.r1",
+                              "nucleotide", "start.r2", "end.r2", "peak.r2", "score.r2",
+                              "enrichment.replicate1", "enrichment.replicate2", "enrichment.average", "start", "end", "peak") 
+write.table(filteredPeaks2.SIRV2[,c(1,14:16,13)], "../data/SislLAL141_SIRV2.Cbp1_pooled_IDR0p05filteredPeaks_summits.bed", col.names = F, row.names = F, sep="\t", quote = FALSE)
+
 #subset with minimum 5-fold enrichment in peaks (average between two replicates)
 write.table(filteredPeaks.SIRV2[filteredPeaks.SIRV2$enrichment.average > 3,c(1,14:16,13)], "../data/SislLAL141_SIRV2.Cbp1_pooled_IDRfilteredPeaks_summits.min3Enr.bed", quote=F, col.names=F, row.names=F, sep="\t")
 
-#write subset with minimum 5-fold enrichment in peaks as Supplemental File 1
+#write subset with minimum 3-fold enrichment in peaks as Supplemental File 1
 write.table(filteredPeaks.SIRV2[filteredPeaks.SIRV2$enrichment.average > 3,c(1,14:16,13,11,12)], "../data/SupplementalFile4.S.islandicusLAL141.SIRV2.Cbp1_peaks.txt", quote=F, col.names=T, row.names=F, sep="\t")
 ```
 
 
+```{r QC plot LAL141 SIRV2}
+#scatter plot depicting matched and unmatched peaks for both replicates, the IDR filtering and the correlation for the set of matched peaks and its subsets
+colnames(matchedPeaks.SIRV2) <- c("nucleotide.r1", "start.r1", "end.r1", "peak.r1", "score.r1",
+                              "nucleotide.r2", "start.r2", "end.r2", "peak.r2", "score.r2",
+                              "enrichment.replicate1", "enrichment.replicate2", "enrichment.average") 
+matchedPeaks.SIRV2$IDR <- idr.out.SIRV2$IDR
+#subsets for unmatched peaks in r1 and r2
+filtPeaks.r1.SIRV2 <- read.table("../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r1_summits.bed")
+unmatched.r1.SIRV2 <- narrow.r1.SIRV2[!narrow.r1.SIRV2$V4 %in% matchedPeaks.SIRV2$peak.r1 & narrow.r1.SIRV2$V4 %in% filtPeaks.r1.SIRV2$V4,]
+filtPeaks.r2.SIRV2 <- read.table("../macs2_SisLAL141/macs2_LAL141_SIRV2_Cbp1_r2_summits.filt.bed")
+unmatched.r2.SIRV2 <- narrow.r2.SIRV2[!narrow.r2.SIRV2$V4 %in% matchedPeaks.SIRV2$peak.r2 & narrow.r2.SIRV2$V4 %in% filtPeaks.r2.SIRV2$V4,]
+
+#plot
+  #color based on peak category: passes IDR, passes min 5 enrichment threshold
+col.v <- as.factor(vector())
+levels(col.v) <- c("3", "2", "1")
+for(i in 1:nrow(matchedPeaks.SIRV2)){
+  j <- if(matchedPeaks.SIRV2$IDR[i] >= 0.01){"1"}else{
+          if(matchedPeaks.SIRV2$enrichment.average[i] <= 3){"2"}else{"3"}}
+  col.v[i] <- j
+  }
+matchedPeaks.SIRV2$col.v <- col.v
+
+#calculating R2 for all matched peaks, IDR filtered and enrichment filtered peaks
+r2.all <- summary(lm(log(matchedPeaks.SIRV2$enrichment.replicate1) ~ 0 + log(matchedPeaks.SIRV2$enrichment.replicate2)))$r.squared
+r2.idr <- summary(lm(log(matchedPeaks.SIRV2$enrichment.replicate1)[matchedPeaks.SIRV2$col.v %in% c(2,3)] ~ 0 + log(matchedPeaks.SIRV2$enrichment.replicate2)[matchedPeaks.SIRV2$col.v %in% c(2,3)]))$r.squared 
+r2.enr <- summary(lm(log(matchedPeaks.SIRV2$enrichment.replicate1)[matchedPeaks.SIRV2$col.v == 3] ~ 0 + log(matchedPeaks.SIRV2$enrichment.replicate2)[matchedPeaks.SIRV2$col.v == 3]))$r.squared 
+ 
+g2 <- ggplot(data = matchedPeaks.SIRV2, aes(x = log(enrichment.replicate1, 2), y = log(enrichment.replicate2, 2), col = col.v))
+g2 <- g2 + geom_point(cex=1, alpha = 0.25) + scale_colour_viridis_d(option="plasma", direction = 1)
+g2 <- g2 + geom_point(data=unmatched.r1.SIRV2, aes(x=log(V7,2), y=0), col="lightgrey", cex=1, alpha = 0.25)
+g2 <- g2 + geom_point(data=unmatched.r2.SIRV2, aes(x=0, y=log(V7,2)), col="lightgrey", cex=1, alpha = 0.25)
+g2 <- g2 + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank(), legend.position='none') +
+  scale_x_continuous(limits=c(-0.5,8.5), breaks=seq(0, 10,by=2), expand = c(0, 0)) +
+  scale_y_continuous(limits=c(-0.5,8.5), breaks=seq(0, 10, by=2), expand = c(0, 0)) +
+  xlab("log2(enrichment replicate 1)") +
+  ylab("log2(enrichment replicate 2)") +
+  ggtitle(paste0("R2 = ", 
+                 round(r2.all, 2), " for all matched peaks, \n",
+                 round(r2.idr, 2), " for peaks filtered by IDR < 0.01, and \n", 
+                 round(r2.enr, 2), " for IDR-filtered peaks with > 3 enrichment"))
+g2
+
+ggplot2::ggsave("../plots/QC_peakCallingSislLAL141_SIRV2_Cbp1.pdf", plot = g2, device = "pdf", path = NULL,
+      scale = 1, width = 80, height = 80, units = c("mm"), limitsize = TRUE)
+
+```
+
+#Matching peaks between SIRV2 infected and uninfected cells
+```{bash}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/envs/py3712/bin
+bedtools window -w 40 -a ../data/SislLAL141.Cbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bed -b ../data/SislLAL141_SIRV2.Cbp1_pooled_noIDR_summits.bed > ../data/matchedPeaks.SislLAL141.SIRV2infectionVsControl.bed
+
+#bedtools window -w 40 -a ../data/SislLAL141.Cbp1_pooled_IDRfilteredPeaks_summits.min5Enr.bed -b ../data/SislLAL141_SIRV2.Cbp1_pooled_IDRfilteredPeaks_summits.bed > ../data/matchedPeaks.SislLAL141.SIRV2infectionVsControl.bed
+```
+
+```{r}
+compare<-read.table("../data/matchedPeaks.SislLAL141.SIRV2infectionVsControl.bed")
+g3 <- ggplot(data = compare, aes(x = log(V5, 2), y = log(V10, 2)))
+g3 <- g3 + geom_point(cex=1, alpha = 0.25, col = "#37339d")
+g3 <- g3 + geom_point(data=filteredPeaks[!(filteredPeaks$peak %in% compare$V4) & filteredPeaks$enrichment.average > 5, c(13,16)], 
+                      aes(x=log(enrichment.average,2), y=0), col="lightgrey", cex=1, alpha = 0.25)
+#g3 <- g3 + geom_point(data=filteredPeaks.SIRV2[!(filteredPeaks.SIRV2$peak %in% compare$V9) & filteredPeaks.SIRV2$enrichment.average > 3, c(13,16)],aes(x=0, y=log(enrichment.average,2)), col="lightgrey", cex=1, alpha = 0.25)
+g3 <- g3 + theme_bw() + theme(aspect.ratio=1, panel.grid = element_blank(), legend.position='none') +
+  scale_x_continuous(limits=c(-0.5,8.5), breaks=seq(0, 10,by=2), expand = c(0, 0)) +
+  scale_y_continuous(limits=c(-0.5,8.5), breaks=seq(0, 10, by=2), expand = c(0, 0)) +
+  xlab("log2(enrichment LAL14/1)") +
+  ylab("log2(enrichment LAL14/1 SIRV2 infected)")
+g3
+
+```
+
+#Add MACS2 broad peak calling for the two Cbp1-bound CRISPR arrays 1 and 2
+```{bash}
+export PATH=$PATH:/Users/fabianblombach/miniconda3/envs/py3712/bin
+
+#calling peaks per replicate
+macs2 callpeak --outdir ../macs2_SisLAL141/  -n macs2Broad_LAL141_Cbp1_r1 -f BEDPE -g 2500627  -q 0.01 --keep-dup auto --broad --min-length 6000 -t $cbp1_LAL141_r1    -c $inp_LAL141_r1
+
+macs2 callpeak --outdir ../macs2_SisLAL141/  -n macs2Broad_LAL141_Cbp1_r2 -f BEDPE -g 2500627 -q 0.01 --keep-dup auto --broad  --min-length 6000 -t $cbp1_LAL141_r2    -c $inp_LAL141_r2
+
+macs2 callpeak --outdir ../macs2_SisLAL141/  -n macs2Broad_LAL141_SIRV2_Cbp1_r1 -f BEDPE -g 2500627  -q 0.01 --keep-dup auto --broad  --min-length 6000 -t $cbp1_LAL141_SIRV2_r1    -c $inp_LAL141_SIRV2_r1
+
+macs2 callpeak --outdir ../macs2_SisLAL141/  -n macs2Broad_LAL141_SIRV2_Cbp1_r2 -f BEDPE -g 2500627 -q 0.01 --keep-dup auto --broad  --min-length 6000 -t $cbp1_LAL141_SIRV2_r2    -c $inp_LAL141_SIRV2_r2
+
+
+
+```
+
+```{r broadPeak Import}
+broad.r1 <- read.table("../macs2_SisLAL141/macs2Broad_LAL141_Cbp1_r1_peaks.broadPeak")
+broad.r2 <- read.table("../macs2_SisLAL141/macs2Broad_LAL141_Cbp1_r2_peaks.broadPeak")
+broad.r1.SIRV2 <- read.table("../macs2_SisLAL141/macs2Broad_LAL141_SIRV2_Cbp1_r1_peaks.broadPeak")
+broad.r2.SIRV2 <- read.table("../macs2_SisLAL141/macs2Broad_LAL141_SIRV2_Cbp1_r2_peaks.broadPeak")
+
+#extract regions overlapping with CRISPR arrays 1 and 2 (entries 1 and 2 in crispr_loci.rRNA.sub)
+broad.r1.filt <- broad.r1[(broad.r1$V2 < start(crispr_loci.rRNA.sub)[1]  & broad.r1$V3 > end(crispr_loci.rRNA.sub)[1])|
+                          (broad.r1$V2 < start(crispr_loci.rRNA.sub)[2]  & broad.r1$V3 > end(crispr_loci.rRNA.sub)[2]),]
+broad.r2.filt <- broad.r2[(broad.r2$V2 < start(crispr_loci.rRNA.sub)[1]  & broad.r2$V3 > end(crispr_loci.rRNA.sub)[1])|
+                          (broad.r2$V2 < start(crispr_loci.rRNA.sub)[2]  & broad.r2$V3 > end(crispr_loci.rRNA.sub)[2]),]
+broad.r1.SIRV2.filt <- broad.r1.SIRV2[(broad.r1.SIRV2$V2 < start(crispr_loci.rRNA.sub)[1]  & broad.r1.SIRV2$V3 > end(crispr_loci.rRNA.sub)[1])|
+                          (broad.r1.SIRV2$V2 < start(crispr_loci.rRNA.sub)[2]  & broad.r1.SIRV2$V3 > end(crispr_loci.rRNA.sub)[2]),]
+broad.r2.SIRV2.filt <- broad.r2.SIRV2[(broad.r2.SIRV2$V2 < start(crispr_loci.rRNA.sub)[1]  & broad.r2.SIRV2$V3 > end(crispr_loci.rRNA.sub)[1])|
+                          (broad.r2.SIRV2$V2 < start(crispr_loci.rRNA.sub)[2]  & broad.r2.SIRV2$V3 > end(crispr_loci.rRNA.sub)[2]),]
+```
+
+```{r Adding CRISPR array enrichment to scatter plots}
+broad.data <- data.frame(crispr.array=1:2, 
+                         average.LAL141= (broad.r1.filt$V7 + broad.r2.filt$V7)/2, 
+                         average.LAL141.SIRV2=(broad.r1.SIRV2.filt$V7 + broad.r2.SIRV2.filt$V7)/2)
+g4 <- g3 + geom_point(data=broad.data, aes(x=log(average.LAL141,2), y=log(average.LAL141.SIRV2,2)), cex=1,alpha=0.5, col="red")
+g4
+```
+```{r Highlight Cbp1 peaks upstream of CRISPR arrays 3,4,5}
+#extract intervals 200 bp upstream of CRISPR arrays 3,4,5
+crispr.upstr <- subset(genome.gff, type %in% c("direct_repeat"))[3:5]
+
+#shifting position to include flanking 200 bp
+start(crispr.upstr) <- start(crispr.upstr) - 200
+end(crispr.upstr) <- end(crispr.upstr) + 200
+
+hl <- compare$V3 %in% c(start(crispr.upstr)[1]:end(crispr.upstr)[1],start(crispr.upstr)[2]:end(crispr.upstr)[2],start(crispr.upstr)[3]:end(crispr.upstr)[3])
+
+compare[hl,]
+
+g5 <- g4 + geom_point(data= compare[hl,], aes(x = log(V5, 2), y = log(V10, 2)), cex=1, alpha = 0.5, col = "aquamarine2")
+g5 + geom_abline(slope=1, intercept=0, lty=2)
+
+ggplot2::ggsave("../plots/scatterPlot_Cbp1Peaks.LAL141vsSIRV2infected.pdf", plot = g5, device = "pdf", path = NULL,
+      scale = 1, width = 80, height = 80, units = c("mm"), limitsize = TRUE)
+```
 
